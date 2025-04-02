@@ -1,0 +1,26 @@
+name: "[Cronicas] Create Pull Request"
+
+run-name: "Create PR to main. #${{ github.run_number }} by ${{ github.actor }}"
+
+on:
+  push:
+    branches:
+      - 'feature/*'
+
+jobs:
+  create-pull-request:
+    name: Create Pull Request
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Create Pull Request
+      uses: peter-evans/create-pull-request@v7
+      with:
+        token: ${{ secrets.PAT_GITHUB_TOKEN }}
+        base: main
+        branch: ${{ github.ref }}
+        title: '[ACTIONS] PR criado automaticamente -> main | by ${{ github.actor }}'
+        body: 'This PR was automatically created by GitHub Actions.'
+        draft: false
