@@ -66,4 +66,4 @@ O pipeline de CI/CD falhou. Por favor, verifique os logs no GitHub Actions.
 
 if (require.main === module) {
   run();
-}
+} 

@@ -1,10 +1,10 @@
 {
   "name": "email-notification-action",
   "version": "1.0.0",
-  "description": "GitHub Action for sending email notifications for workflow failures",
+  "description": "GitHub Action for sending email notifications for workflow failures.",
   "main": "dist/index.js",
   "scripts": {
-    "build": "tsc",
+    "build": "ncc build src/index.ts -o dist",
     "test": "jest",
     "lint": "eslint ."
   },
