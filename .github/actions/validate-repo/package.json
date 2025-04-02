@@ -4,7 +4,7 @@
   "description": "Action utilizada para validar a estrutura do repositório",
   "main": "dist/index.js",
   "scripts": {
-    "build": "tsc",
+    "build": "ncc build src/index.ts -o dist",
     "test": "jest",
     "lint": "eslint ."
   },
