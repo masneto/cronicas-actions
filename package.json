@@ -17,5 +17,8 @@
   "bugs": {
     "url": "https://github.com/masneto/cronicas-actions/issues"
   },
-  "homepage": "https://github.com/masneto/cronicas-actions#readme"
+  "homepage": "https://github.com/masneto/cronicas-actions#readme",
+  "devDependencies": {
+    "@vercel/ncc": "^0.38.3"
+  }
 }
