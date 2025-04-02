@@ -32,7 +32,9 @@ jobs:
           CHANGED_DIRS=$(git diff --name-only ${{ github.event.before }} ${{ github.sha }} | grep '^\.github/actions/' | cut -d'/' -f1-3 | sort -u || true)
           echo "Found changed action directories:"
           echo "$CHANGED_DIRS"
-          echo "actions=$CHANGED_DIRS" >> "$GITHUB_ENV"
+          CHANGED_DIR=$(echo "$CHANGED_DIRS" | tr '\n' ' ')
+          echo "actions=$CHANGED_DIR"
+          echo "actions=$CHANGED_DIR" >> "$GITHUB_ENV"
 
       - name: Process Actions and Commit Changes
         if: env.actions != ''
