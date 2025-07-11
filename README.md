@@ -16,14 +16,14 @@ Repositório de GitHub Actions customizadas para automação dos workflows do pr
 
 ```
 .github/actions/ 
-├── email-notification-action/ 
-    ├── action.yml 
-    ├── src/ 
-    └── tests/ 
-└── validate-repo/ 
-    ├── action.yml 
-    ├── src/ 
-    └── tests/
+    ├── email-notification-action/ 
+        ├── action.yml 
+        ├── src/ 
+        └── tests/ 
+    └── validate-repo/ 
+        ├── action.yml 
+        ├── src/ 
+        └── tests/
 ```
 
 
