@@ -14,5 +14,5 @@ outputs:
   workflow-file:
     description: 'Nome do arquivo workflow copiado para a raiz de workflows'
 runs:
-  using: 'node16'
+  using: 'node20'
   main: 'dist/index.js'
