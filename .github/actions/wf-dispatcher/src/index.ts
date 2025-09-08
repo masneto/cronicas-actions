@@ -66,9 +66,11 @@ export async function run() {
     console.log("[DEBUG] Espera finalizada");
 
     // 5. Dispara workflow
+    const owner = "masneto";
+    const repo = "cronicas-monitor";
     const dispatchPayload = {
-      owner: github.context.repo.owner,
-      repo: github.context.repo.repo,
+      owner,
+      repo,
       workflow_id: workflowFileName,
       ref: tempBranch,
       inputs: JSON.parse(inputsJson),
