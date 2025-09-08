@@ -17,5 +17,5 @@ inputs:
     description: "GITHUB_TOKEN ou PAT com permissão em repo child"
     required: true
 runs:
-  using: "node16"
+  using: "node20"
   main: "dist/index.js"
