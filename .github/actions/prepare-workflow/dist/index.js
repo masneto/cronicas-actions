@@ -32608,28 +32608,41 @@ const fs = __importStar(__nccwpck_require__(7147));
 function run() {
     return __awaiter(this, void 0, void 0, function* () {
         try {
+            console.log("[DEBUG] Iniciando prepare-workflow run()");
             const sourceFile = core.getInput("source-file", { required: true });
             const branch = core.getInput("branch", { required: true });
             const token = core.getInput("token", { required: true });
+            console.log("[DEBUG] Inputs recebidos:", { sourceFile, branch, token: token ? '[OK]' : '[FALTANDO]' });
             const octokit = github.getOctokit(token);
             const tempBranch = `${branch}-temp`;
+            console.log("[DEBUG] tempBranch:", tempBranch);
             yield (0, exec_1.exec)("git", ["init"]);
+            console.log("[DEBUG] git init executado");
             const repoUrl = `https://x-access-token:${token}@github.com/masneto/cronicas-monitor.git`;
+            console.log("[DEBUG] repoUrl:", repoUrl);
             yield (0, exec_1.exec)("git", ["remote", "add", "origin", repoUrl]);
+            console.log("[DEBUG] git remote add origin executado");
             yield (0, exec_1.exec)("git", ["fetch", "origin"]);
+            console.log("[DEBUG] git fetch origin executado");
             yield (0, exec_1.exec)("git", ["checkout", "-b", tempBranch, "origin/main"]);
+            console.log("[DEBUG] git checkout -b", tempBranch, "origin/main executado");
             yield fs.promises.mkdir(".github/workflows", { recursive: true });
+            console.log("[DEBUG] mkdir .github/workflows executado");
             const workflowFileName = sourceFile.split("/").pop();
             yield fs.promises.copyFile(sourceFile, `.github/workflows/${workflowFileName}`);
+            console.log("[DEBUG] copyFile", sourceFile, `.github/workflows/${workflowFileName}`);
             yield (0, exec_1.exec)("git", ["config", "user.name", "github-actions"]);
             yield (0, exec_1.exec)("git", ["config", "user.email", "github-actions@github.com"]);
             yield (0, exec_1.exec)("git", ["add", "."]);
             yield (0, exec_1.exec)("git", ["commit", "-m", `add workflow ${workflowFileName}`]);
             yield (0, exec_1.exec)("git", ["push", "origin", tempBranch, "--force"]);
+            console.log("[DEBUG] Commit e push executados");
             core.setOutput("workflow-file", workflowFileName);
             core.setOutput("temp-branch", tempBranch);
+            console.log("[DEBUG] Outputs setados:", { workflowFileName, tempBranch });
         }
         catch (error) {
+            console.log("[DEBUG][ERRO]", error);
             core.setFailed(error.message);
         }
     });

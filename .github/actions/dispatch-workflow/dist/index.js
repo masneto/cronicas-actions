@@ -32606,25 +32606,33 @@ const github = __importStar(__nccwpck_require__(5438));
 function run() {
     return __awaiter(this, void 0, void 0, function* () {
         try {
+            console.log("[DEBUG] Iniciando dispatch-workflow run()");
             const workflowFile = core.getInput("workflow-file", { required: true });
             const branch = core.getInput("branch", { required: true });
             const inputsJson = core.getInput("inputs-json", { required: true });
             const token = core.getInput("token", { required: true });
+            console.log("[DEBUG] Inputs recebidos:", { workflowFile, branch, inputsJson, token: token ? '[OK]' : '[FALTANDO]' });
             const octokit = github.getOctokit(token);
             const owner = "masneto";
             const repo = "cronicas-monitor";
             // Aguarda 10 segundos para garantir indexação
+            console.log("[DEBUG] Esperando 10 segundos antes de disparar o workflow...");
             yield new Promise((r) => setTimeout(r, 10000));
-            yield octokit.rest.actions.createWorkflowDispatch({
+            console.log("[DEBUG] Espera finalizada");
+            const dispatchPayload = {
                 owner,
                 repo,
                 workflow_id: workflowFile,
                 ref: branch,
                 inputs: JSON.parse(inputsJson),
-            });
+            };
+            console.log("[DEBUG] Payload para createWorkflowDispatch:", dispatchPayload);
+            yield octokit.rest.actions.createWorkflowDispatch(dispatchPayload);
             core.info(`Workflow ${workflowFile} disparado na branch ${branch}`);
+            console.log("[DEBUG] Workflow disparado");
         }
         catch (error) {
+            console.log("[DEBUG][ERRO]", error);
             core.setFailed(error.message);
         }
     });
