@@ -60,9 +60,9 @@ export async function run() {
     await exec("git", ["push", "origin", tempBranch, "--force"]);
     console.log("[DEBUG] Commit e push executados");
 
-    // 4. Espera 20 segundos
-    console.log("[DEBUG] Esperando 20 segundos antes de disparar o workflow...");
-    await new Promise((r) => setTimeout(r, 20000));
+    // 4. Espera 10 segundos
+    console.log("[DEBUG] Esperando 10 segundos antes de disparar o workflow...");
+    await new Promise((r) => setTimeout(r, 10000));
     console.log("[DEBUG] Espera finalizada");
 
     // 5. Dispara workflow
