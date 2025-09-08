@@ -14,9 +14,9 @@ export async function run() {
     const owner = "masneto";
     const repo = "cronicas-monitor";
 
-    // Aguarda 10 segundos para garantir indexação
-    console.log("[DEBUG] Esperando 10 segundos antes de disparar o workflow...");
-    await new Promise((r) => setTimeout(r, 10000));
+    // Aguarda 20 segundos para garantir indexação
+    console.log("[DEBUG] Esperando 20 segundos antes de disparar o workflow...");
+    await new Promise((r) => setTimeout(r, 20000));
     console.log("[DEBUG] Espera finalizada");
 
     const dispatchPayload = {
