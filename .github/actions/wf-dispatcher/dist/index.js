@@ -32600,13 +32600,11 @@ async function run() {
     try {
         console.log("[DEBUG] Iniciando run()");
         const sourceFile = core.getInput("source-file", { required: true });
-        const workflowFile = core.getInput("workflow-file", { required: true });
         const branch = core.getInput("branch", { required: true });
         const inputsJson = core.getInput("inputs-json", { required: true });
         const token = core.getInput("token", { required: true });
         console.log("[DEBUG] Inputs recebidos:", {
             sourceFile,
-            workflowFile,
             branch,
             inputsJson,
             token: token ? "[OK]" : "[FALTANDO]",
@@ -32618,7 +32616,6 @@ async function run() {
         await (0, exec_1.exec)("git", ["init"]);
         console.log("[DEBUG] git init executado");
         const repoUrl = `https://x-access-token:${token}@github.com/masneto/cronicas-monitor.git`;
-        // const repoUrl = `https://x-access-token:${token}@github.com/${github.context.repo.owner}/${github.context.repo.repo}.git`;
         console.log("[DEBUG] repoUrl:", repoUrl);
         await (0, exec_1.exec)("git", ["remote", "add", "origin", repoUrl]);
         console.log("[DEBUG] git remote add origin executado");
@@ -32626,16 +32623,17 @@ async function run() {
         console.log("[DEBUG] git fetch origin executado");
         await (0, exec_1.exec)("git", ["checkout", "-b", tempBranch, "origin/main"]);
         console.log("[DEBUG] git checkout -b", tempBranch, "origin/main executado");
-        // 2. Move arquivo para workflows
+        // 2. Move arquivo para workflows (mantendo o nome original)
         await fs.promises.mkdir(".github/workflows", { recursive: true });
         console.log("[DEBUG] mkdir .github/workflows executado");
-        await fs.promises.copyFile(sourceFile, `.github/workflows/${workflowFile}`);
-        console.log("[DEBUG] copyFile", sourceFile, `.github/workflows/${workflowFile}`);
+        const workflowFileName = sourceFile.split("/").pop();
+        await fs.promises.copyFile(sourceFile, `.github/workflows/${workflowFileName}`);
+        console.log("[DEBUG] copyFile", sourceFile, `.github/workflows/${workflowFileName}`);
         // 3. Commit e push branch temporária
         await (0, exec_1.exec)("git", ["config", "user.name", "github-actions"]);
         await (0, exec_1.exec)("git", ["config", "user.email", "github-actions@github.com"]);
         await (0, exec_1.exec)("git", ["add", "."]);
-        await (0, exec_1.exec)("git", ["commit", "-m", `add workflow ${workflowFile}`]);
+        await (0, exec_1.exec)("git", ["commit", "-m", `add workflow ${workflowFileName}`]);
         await (0, exec_1.exec)("git", ["push", "origin", tempBranch, "--force"]);
         console.log("[DEBUG] Commit e push executados");
         // 4. Espera 20 segundos
@@ -32646,13 +32644,13 @@ async function run() {
         const dispatchPayload = {
             owner: github.context.repo.owner,
             repo: github.context.repo.repo,
-            workflow_id: workflowFile,
+            workflow_id: workflowFileName,
             ref: tempBranch,
             inputs: JSON.parse(inputsJson),
         };
         console.log("[DEBUG] Payload para createWorkflowDispatch:", dispatchPayload);
         await octokit.rest.actions.createWorkflowDispatch(dispatchPayload);
-        core.info(`Workflow ${workflowFile} disparado na branch ${tempBranch}`);
+        core.info(`Workflow ${workflowFileName} disparado na branch ${tempBranch}`);
         console.log("[DEBUG] Workflow disparado");
         // 6. Remove a branch temporária
         const deletePayload = {
