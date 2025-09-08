@@ -4,6 +4,9 @@ inputs:
   source-file:
     description: 'Caminho do arquivo workflow a ser copiado'
     required: true
+  workflow-file:
+    description: 'Nome do arquivo workflow na raiz de workflows'
+    required: true
   branch:
     description: 'Nome da branch base'
     required: true
@@ -23,7 +26,7 @@ runs:
         source-file: ${{ inputs.source-file }}
         branch: ${{ inputs.branch }}
         token: ${{ inputs.token }}
-        
+
     - name: Disparar workflow
       uses: masneto/cronicas-actions/.github/actions/dispatch-workflow
       with:
