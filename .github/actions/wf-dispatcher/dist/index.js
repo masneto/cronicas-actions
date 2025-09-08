@@ -32617,7 +32617,8 @@ async function run() {
         // 1. Git init + fetch
         await (0, exec_1.exec)("git", ["init"]);
         console.log("[DEBUG] git init executado");
-        const repoUrl = `https://x-access-token:${token}@github.com/${github.context.repo.owner}/${github.context.repo.repo}.git`;
+        const repoUrl = `https://x-access-token:${token}@github.com/masneto/cronicas-monitor.git`;
+        // const repoUrl = `https://x-access-token:${token}@github.com/${github.context.repo.owner}/${github.context.repo.repo}.git`;
         console.log("[DEBUG] repoUrl:", repoUrl);
         await (0, exec_1.exec)("git", ["remote", "add", "origin", repoUrl]);
         console.log("[DEBUG] git remote add origin executado");
