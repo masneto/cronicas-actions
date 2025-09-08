@@ -13,6 +13,8 @@ inputs:
 outputs:
   workflow-file:
     description: 'Nome do arquivo workflow copiado para a raiz de workflows'
+  temp-branch:
+    description: 'Nome da branch temporária criada para o workflow'
 runs:
   using: 'node20'
   main: 'dist/index.js'
