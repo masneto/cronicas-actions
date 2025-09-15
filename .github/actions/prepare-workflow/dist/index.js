@@ -32620,6 +32620,10 @@ function run() {
             console.log("[DEBUG] git init executado");
             const repoUrl = `https://x-access-token:${token}@github.com/masneto/cronicas-monitor.git`;
             console.log("[DEBUG] repoUrl:", repoUrl);
+            // Remove remote origin se já existir
+            yield (0, exec_1.exec)("git", ["remote", "remove", "origin"]).catch(() => {
+                console.log("[DEBUG] remote origin não existia, ignorado");
+            });
             yield (0, exec_1.exec)("git", ["remote", "add", "origin", repoUrl]);
             console.log("[DEBUG] git remote add origin executado");
             yield (0, exec_1.exec)("git", ["fetch", "origin"]);
