@@ -1,0 +1,20 @@
+name: 'Prepare Workflow'
+description: 'Copia o workflow para a branch temporária e retorna o nome do arquivo.'
+inputs:
+  source-file:
+    description: 'Caminho do arquivo workflow a ser copiado'
+    required: true
+  branch:
+    description: 'Nome da branch base'
+    required: true
+  token:
+    description: 'GitHub Token'
+    required: true
+outputs:
+  workflow-file:
+    description: 'Nome do arquivo workflow copiado para a raiz de workflows'
+  temp-branch:
+    description: 'Nome da branch temporária criada para o workflow'
+runs:
+  using: 'node20'
+  main: 'dist/index.js'

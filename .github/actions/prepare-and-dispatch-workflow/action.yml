@@ -1,0 +1,36 @@
+name: 'Prepare and Dispatch Workflow'
+description: 'Prepara e dispara workflow de forma orquestrada.'
+inputs:
+  source-file:
+    description: 'Caminho do arquivo workflow a ser copiado'
+    required: true
+  workflow-file:
+    description: 'Nome do arquivo workflow na raiz de workflows'
+    required: true
+  branch:
+    description: 'Nome da branch base'
+    required: true
+  inputs-json:
+    description: 'Inputs para o workflow (JSON)'
+    required: true
+  token:
+    description: 'GitHub Token'
+    required: true
+runs:
+  using: 'composite'
+  steps:
+    - name: Preparar workflow
+      id: prepare
+      uses: masneto/cronicas-actions/.github/actions/prepare-workflow@feature/add-wf-dispatcher
+      with:
+        source-file: ${{ inputs.source-file }}
+        branch: ${{ inputs.branch }}
+        token: ${{ inputs.token }}
+
+    - name: Disparar workflow
+      uses: masneto/cronicas-actions/.github/actions/dispatch-workflow@feature/add-wf-dispatcher
+      with:
+        workflow-file: ${{ steps.prepare.outputs.workflow-file }}
+        branch: ${{ steps.prepare.outputs.temp-branch }}
+        inputs-json: ${{ inputs.inputs-json }}
+        token: ${{ inputs.token }}

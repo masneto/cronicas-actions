@@ -1,0 +1,21 @@
+name: "Workflow Relay"
+description: "Cria branch temporária, move workflow, dispara job e limpa branch"
+inputs:
+  source-file:
+    description: "Arquivo que será movido para .github/workflows/"
+    required: true
+  workflow-file:
+    description: "Nome do workflow YAML que será disparado"
+    required: true
+  branch:
+    description: "Branch que disparou no repositório chamador"
+    required: true
+  inputs-json:
+    description: "Inputs em formato JSON {input1:valor, input2:valor}"
+    required: true
+  token:
+    description: "GITHUB_TOKEN ou PAT com permissão em repo child"
+    required: true
+runs:
+  using: "node20"
+  main: "dist/index.js"
