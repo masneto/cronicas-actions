@@ -32626,10 +32626,12 @@ function run() {
             const artifactDir = `./temp-preview`;
             fs.mkdirSync(artifactDir, { recursive: true });
             const octokit = github.getOctokit(token);
-            console.log("[DEBUG] Buscando artifacts do workflow run", artifactRunId);
+            // Usar owner/repo do artifactRepo para buscar o artifact
+            const [artifactOwner, artifactRepoName] = artifactRepo.split("/");
+            console.log("[DEBUG] Buscando artifacts do workflow run", artifactRunId, "em", artifactOwner, artifactRepoName);
             const artifacts = yield octokit.rest.actions.listWorkflowRunArtifacts({
-                owner,
-                repo,
+                owner: artifactOwner,
+                repo: artifactRepoName,
                 run_id: parseInt(artifactRunId),
             });
             console.log("[DEBUG] Artifacts encontrados:", artifacts.data.artifacts.map(a => a.name));
@@ -32638,8 +32640,8 @@ function run() {
                 throw new Error(`Artifact pr-${prNumber} não encontrado`);
             console.log("[DEBUG] Baixando artifact id:", match.id);
             const download = yield octokit.rest.actions.downloadArtifact({
-                owner,
-                repo,
+                owner: artifactOwner,
+                repo: artifactRepoName,
                 artifact_id: match.id,
                 archive_format: "zip",
             });
