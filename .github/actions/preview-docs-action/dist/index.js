@@ -32654,7 +32654,24 @@ function run() {
             const targetDir = `./${path.basename(artifactRepo)}/pr-${prNumber}`;
             fs.mkdirSync(targetDir, { recursive: true });
             console.log("[DEBUG] Copiando arquivos do artifact para:", targetDir);
-            yield (0, exec_1.exec)("cp", ["-r", `${artifactDir}/*`, targetDir]);
+            // Copiar arquivos do artifactDir para targetDir recursivamente
+            const copyRecursiveSync = (src, dest) => {
+                if (!fs.existsSync(src))
+                    return;
+                const stats = fs.statSync(src);
+                if (stats.isDirectory()) {
+                    fs.mkdirSync(dest, { recursive: true });
+                    for (const file of fs.readdirSync(src)) {
+                        const srcFile = path.join(src, file);
+                        const destFile = path.join(dest, file);
+                        copyRecursiveSync(srcFile, destFile);
+                    }
+                }
+                else {
+                    fs.copyFileSync(src, dest);
+                }
+            };
+            copyRecursiveSync(artifactDir, targetDir);
             core.endGroup();
             // 5. Atualizar index.html com card do PR
             core.startGroup('Atualizando index.html com card do PR');
