@@ -7,17 +7,20 @@ import * as path from "path";
 export async function run() {
   try {
     // 1. Inputs e contexto
-    const artifactRepo = core.getInput("artifact_repo");
-    const prNumber = core.getInput("pr_number");
-    const artifactRunId = core.getInput("artifact_run_id");
-    const token = core.getInput("token", { required: true });
-    const { owner, repo } = github.context.repo;
+  const artifactRepo = core.getInput("artifact_repo");
+  const prNumber = core.getInput("pr_number");
+  const artifactRunId = core.getInput("artifact_run_id");
+  const token = core.getInput("token", { required: true });
+  const { owner, repo } = github.context.repo;
+  console.log("[DEBUG] Inputs:", { artifactRepo, prNumber, artifactRunId, owner, repo });
 
     // 2. Checkout e preparação do branch gh-pages
     core.startGroup('Checkout e preparação do branch gh-pages');
+    console.log("[DEBUG] Fetching and checking out gh-pages branch...");
     await exec("git", ["fetch", "origin", "gh-pages:gh-pages"], { ignoreReturnCode: true });
     await exec("git", ["checkout", "gh-pages"], { ignoreReturnCode: true });
     if (!fs.existsSync(".git/refs/heads/gh-pages")) {
+      console.log("[DEBUG] gh-pages branch não existe, criando...");
       await exec("git", ["checkout", "--orphan", "gh-pages"]);
       fs.writeFileSync("index.html", "");
       await exec("git", ["add", "index.html"]);
@@ -31,13 +34,16 @@ export async function run() {
     const artifactDir = `./temp-preview`;
     fs.mkdirSync(artifactDir, { recursive: true });
     const octokit = github.getOctokit(token);
+    console.log("[DEBUG] Buscando artifacts do workflow run", artifactRunId);
     const artifacts = await octokit.rest.actions.listWorkflowRunArtifacts({
       owner,
       repo,
       run_id: parseInt(artifactRunId),
     });
+    console.log("[DEBUG] Artifacts encontrados:", artifacts.data.artifacts.map(a => a.name));
     const match = artifacts.data.artifacts.find(a => a.name === `pr-${prNumber}`);
     if (!match) throw new Error(`Artifact pr-${prNumber} não encontrado`);
+    console.log("[DEBUG] Baixando artifact id:", match.id);
     const download = await octokit.rest.actions.downloadArtifact({
       owner,
       repo,
@@ -53,6 +59,7 @@ export async function run() {
     core.startGroup('Copiando conteúdo do artifact para pasta do PR');
     const targetDir = `./${path.basename(artifactRepo)}/pr-${prNumber}`;
     fs.mkdirSync(targetDir, { recursive: true });
+    console.log("[DEBUG] Copiando arquivos do artifact para:", targetDir);
     await exec("cp", ["-r", `${artifactDir}/*`, targetDir]);
     core.endGroup();
 
@@ -62,6 +69,7 @@ export async function run() {
     let indexContent = "";
     if (fs.existsSync(indexFile)) {
       indexContent = fs.readFileSync(indexFile, "utf-8");
+      console.log("[DEBUG] index.html existente carregado");
     } else {
       // Busca index.template.html do branch main se não existir
       try {
@@ -70,11 +78,14 @@ export async function run() {
         if (fs.existsSync("index.template.html")) {
           fs.copyFileSync("index.template.html", indexFile);
           indexContent = fs.readFileSync(indexFile, "utf-8");
+          console.log("[DEBUG] index.template.html copiado para index.html");
         } else {
           indexContent = "<div class=\"grid\"></div>";
+          console.log("[DEBUG] Nenhum template encontrado, usando grid vazio");
         }
       } catch (e) {
         indexContent = "<div class=\"grid\"></div>";
+        console.log("[DEBUG] Erro ao buscar template, usando grid vazio");
       }
     }
     // Blocos delimitadores para cards de PR
@@ -109,10 +120,12 @@ export async function run() {
     // Monta o novo conteúdo
     indexContent = `${before}\n${prBlock.trim()}\n${after}`;
     fs.writeFileSync(indexFile, indexContent);
+    console.log("[DEBUG] index.html atualizado");
     core.endGroup();
 
     // 6. Commit e push das alterações
     core.startGroup('Commit e push das alterações');
+    console.log("[DEBUG] Commitando e dando push no gh-pages...");
     await exec("git", ["add", "."]);
     await exec("git", ["commit", "-m", `Update preview for PR #${prNumber}`], { ignoreReturnCode: true });
     await exec("git", ["push", "origin", "gh-pages"]);
@@ -120,6 +133,7 @@ export async function run() {
 
     // 7. Comentar no PR
     const previewUrl = `https://${owner}.github.io/${repo}/${path.basename(artifactRepo)}/pr-${prNumber}/`;
+    console.log("[DEBUG] Preview URL:", previewUrl);
     // Remover comentários antigos do PR que não são do bot
     core.startGroup('Removendo comentários antigos do PR');
     const prOwner = artifactRepo.split("/")[0];
@@ -129,6 +143,7 @@ export async function run() {
       repo: prRepo,
       issue_number: parseInt(prNumber),
     });
+    console.log("[DEBUG] Comentários encontrados:", comments.data.length);
     for (const comment of comments.data) {
       const user = comment.user?.login || "";
       if (user !== "github-actions[bot]" && user !== "copilot[bot]") {
@@ -153,6 +168,7 @@ export async function run() {
       issue_number: parseInt(prNumber),
       body: `🚀 **Preview disponível!**\n\n📖 [Documentação](${previewUrl})`,
     });
+    console.log("[DEBUG] Comentário de preview postado no PR");
     core.endGroup();
     core.setOutput("preview-url", previewUrl);
   } catch (err: any) {
