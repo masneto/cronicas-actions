@@ -1,6 +1,6 @@
 name: 'Email Notification Action'
 description: 'Sends email notifications for workflow failures.'
-author: 'Crônicas Team '
+author: 'Crônicas Team'
 
 inputs:
   smtp_server:
