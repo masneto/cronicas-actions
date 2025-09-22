@@ -63,6 +63,11 @@ export async function packageStep() {
     const zipPath = path.join(artifactDir, "artifact.zip");
     fs.writeFileSync(zipPath, Buffer.from(download.data as ArrayBuffer));
     await exec("unzip", ["-o", zipPath, "-d", artifactDir]);
+    // Remove o arquivo zip após descompactar
+    if (fs.existsSync(zipPath)) {
+      fs.unlinkSync(zipPath);
+      console.log("[DEBUG] artifact.zip removido após descompactação");
+    }
     core.endGroup();
 
     // 4. Copiar conteúdo do artifact para pasta do PR

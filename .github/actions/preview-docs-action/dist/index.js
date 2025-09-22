@@ -32653,6 +32653,11 @@ function packageStep() {
             const zipPath = path.join(artifactDir, "artifact.zip");
             fs.writeFileSync(zipPath, Buffer.from(download.data));
             yield (0, exec_1.exec)("unzip", ["-o", zipPath, "-d", artifactDir]);
+            // Remove o arquivo zip após descompactar
+            if (fs.existsSync(zipPath)) {
+                fs.unlinkSync(zipPath);
+                console.log("[DEBUG] artifact.zip removido após descompactação");
+            }
             core.endGroup();
             // 4. Copiar conteúdo do artifact para pasta do PR
             core.startGroup('Copiando conteúdo do artifact para pasta do PR');
