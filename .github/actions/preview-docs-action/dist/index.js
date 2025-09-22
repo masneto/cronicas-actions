@@ -32600,13 +32600,19 @@ function run() {
     var _a;
     return __awaiter(this, void 0, void 0, function* () {
         try {
-            // 1. Inputs e contexto
+            // 0. Inputs e contexto
             const artifactRepo = core.getInput("artifact_repo");
             const prNumber = core.getInput("pr_number");
             const artifactRunId = core.getInput("artifact_run_id");
             const token = core.getInput("token", { required: true });
             const { owner, repo } = github.context.repo;
             console.log("[DEBUG] Inputs:", { artifactRepo, prNumber, artifactRunId, owner, repo });
+            // 1. Configurar usuário do Git para o bot
+            core.startGroup('Configuração do usuário do Git');
+            console.log('[DEBUG] Configurando git user.name e user.email para github-actions[bot]');
+            yield (0, exec_1.exec)('git', ['config', 'user.name', 'github-actions[bot]']);
+            yield (0, exec_1.exec)('git', ['config', 'user.email', 'github-actions[bot]@users.noreply.github.com']);
+            core.endGroup();
             // 2. Checkout e preparação do branch gh-pages
             core.startGroup('Checkout e preparação do branch gh-pages');
             console.log("[DEBUG] Fetching and checking out gh-pages branch...");
