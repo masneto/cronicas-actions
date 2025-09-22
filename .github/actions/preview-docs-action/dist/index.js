@@ -32590,14 +32590,13 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.run = void 0;
+exports.run = exports.commentStep = exports.packageStep = void 0;
 const core = __importStar(__nccwpck_require__(7484));
 const github = __importStar(__nccwpck_require__(3228));
 const exec_1 = __nccwpck_require__(5236);
 const fs = __importStar(__nccwpck_require__(9896));
 const path = __importStar(__nccwpck_require__(6928));
-function run() {
-    var _a;
+function packageStep() {
     return __awaiter(this, void 0, void 0, function* () {
         try {
             // 0. Inputs e contexto
@@ -32660,7 +32659,7 @@ function run() {
             const targetDir = `./${path.basename(artifactRepo)}/pr-${prNumber}`;
             fs.mkdirSync(targetDir, { recursive: true });
             console.log("[DEBUG] Copiando arquivos do artifact para:", targetDir);
-            // Copiar arquivos do artifactDir para targetDir recursivamente
+            // Copiar conteúdo de artifactDir (arquivos e subpastas) para targetDir
             const copyRecursiveSync = (src, dest) => {
                 if (!fs.existsSync(src))
                     return;
@@ -32677,7 +32676,14 @@ function run() {
                     fs.copyFileSync(src, dest);
                 }
             };
-            copyRecursiveSync(artifactDir, targetDir);
+            // Copia cada item de dentro de artifactDir para targetDir
+            for (const file of fs.readdirSync(artifactDir)) {
+                const srcFile = path.join(artifactDir, file);
+                const destFile = path.join(targetDir, file);
+                copyRecursiveSync(srcFile, destFile);
+            }
+            // Remove a pasta temp-preview após a cópia, igual ao workflow shell
+            fs.rmSync(artifactDir, { recursive: true, force: true });
             core.endGroup();
             // 5. Atualizar index.html com card do PR
             core.startGroup('Atualizando index.html com card do PR');
@@ -32749,7 +32755,22 @@ function run() {
             yield (0, exec_1.exec)("git", ["commit", "-m", `Update preview for PR #${prNumber}`], { ignoreReturnCode: true });
             yield (0, exec_1.exec)("git", ["push", "origin", "gh-pages"]);
             core.endGroup();
-            // 7. Comentar no PR
+        }
+        catch (err) {
+            core.setFailed(err.message);
+        }
+    });
+}
+exports.packageStep = packageStep;
+function commentStep() {
+    var _a;
+    return __awaiter(this, void 0, void 0, function* () {
+        try {
+            const artifactRepo = core.getInput("artifact_repo");
+            const prNumber = core.getInput("pr_number");
+            const token = core.getInput("token", { required: true });
+            const { owner, repo } = github.context.repo;
+            const octokit = github.getOctokit(token);
             const previewUrl = `https://${owner}.github.io/${repo}/${path.basename(artifactRepo)}/pr-${prNumber}/`;
             console.log("[DEBUG] Preview URL:", previewUrl);
             // Remover comentários antigos do PR que não são do bot
@@ -32793,6 +32814,21 @@ function run() {
         }
         catch (err) {
             core.setFailed(err.message);
+        }
+    });
+}
+exports.commentStep = commentStep;
+function run() {
+    return __awaiter(this, void 0, void 0, function* () {
+        const step = core.getInput("step", { required: false }) || "package";
+        if (step === "package") {
+            yield packageStep();
+        }
+        else if (step === "comment") {
+            yield commentStep();
+        }
+        else {
+            core.setFailed(`Valor de step inválido: ${step}`);
         }
     });
 }

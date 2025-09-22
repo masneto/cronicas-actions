@@ -2,6 +2,9 @@ name: 'Docs Preview Deploy'
 description: 'Deploy de previews de PR para documentação'
 author: 'Cronicas Team'
 inputs:
+  step:
+    description: 'Etapa a ser executada: package, comment'
+    required: true
   artifact_repo:
     description: 'Repositório onde o artifact do PR foi gerado'
     required: true

@@ -4,7 +4,8 @@ import { exec } from "@actions/exec";
 import * as fs from "fs";
 import * as path from "path";
 
-export async function run() {
+
+export async function packageStep() {
   try {
     // 0. Inputs e contexto
     const artifactRepo = core.getInput("artifact_repo");
@@ -69,7 +70,7 @@ export async function run() {
     const targetDir = `./${path.basename(artifactRepo)}/pr-${prNumber}`;
     fs.mkdirSync(targetDir, { recursive: true });
     console.log("[DEBUG] Copiando arquivos do artifact para:", targetDir);
-    // Copiar arquivos do artifactDir para targetDir recursivamente
+    // Copiar conteúdo de artifactDir (arquivos e subpastas) para targetDir
     const copyRecursiveSync = (src: string, dest: string) => {
       if (!fs.existsSync(src)) return;
       const stats = fs.statSync(src);
@@ -84,7 +85,14 @@ export async function run() {
         fs.copyFileSync(src, dest);
       }
     };
-    copyRecursiveSync(artifactDir, targetDir);
+    // Copia cada item de dentro de artifactDir para targetDir
+    for (const file of fs.readdirSync(artifactDir)) {
+      const srcFile = path.join(artifactDir, file);
+      const destFile = path.join(targetDir, file);
+      copyRecursiveSync(srcFile, destFile);
+    }
+    // Remove a pasta temp-preview após a cópia, igual ao workflow shell
+    fs.rmSync(artifactDir, { recursive: true, force: true });
     core.endGroup();
 
     // 5. Atualizar index.html com card do PR
@@ -154,8 +162,18 @@ export async function run() {
     await exec("git", ["commit", "-m", `Update preview for PR #${prNumber}`], { ignoreReturnCode: true });
     await exec("git", ["push", "origin", "gh-pages"]);
     core.endGroup();
+  } catch (err: any) {
+    core.setFailed(err.message);
+  }
+}
 
-    // 7. Comentar no PR
+export async function commentStep() {
+  try {
+    const artifactRepo = core.getInput("artifact_repo");
+    const prNumber = core.getInput("pr_number");
+    const token = core.getInput("token", { required: true });
+    const { owner, repo } = github.context.repo;
+    const octokit = github.getOctokit(token);
     const previewUrl = `https://${owner}.github.io/${repo}/${path.basename(artifactRepo)}/pr-${prNumber}/`;
     console.log("[DEBUG] Preview URL:", previewUrl);
     // Remover comentários antigos do PR que não são do bot
@@ -197,6 +215,17 @@ export async function run() {
     core.setOutput("preview-url", previewUrl);
   } catch (err: any) {
     core.setFailed(err.message);
+  }
+}
+
+export async function run() {
+  const step = core.getInput("step", { required: false }) || "package";
+  if (step === "package") {
+    await packageStep();
+  } else if (step === "comment") {
+    await commentStep();
+  } else {
+    core.setFailed(`Valor de step inválido: ${step}`);
   }
 }
 
