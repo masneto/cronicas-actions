@@ -17,7 +17,7 @@
   "author": "Crônicas Team",
   "license": "MIT",
   "dependencies": {
-    "@actions/core": "^1.10.1",
+    "@actions/core": "^3.0.1",
     "nodemailer": "^8.0.0",
     "typescript-eslint": "^8.60.1"
   },
@@ -29,6 +29,6 @@
     "eslint": "^9.23.0",
     "jest": "^30.0.0",
     "ts-jest": "^29.4.11",
-    "typescript": "^6.0.0"
+    "typescript": "^5.8.2"
   }
 }
