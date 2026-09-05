@@ -141,7 +141,9 @@ jobs:
               fi
               OVERRIDE_FALLBACK_APPLIED=true
             elif [ "$AFTER_EXPLICIT" -gt 0 ]; then
-              REASONS="${REASONS} Fallback de overrides ignorado (valores já estavam nas versões-alvo)."
+              npm install --package-lock-only --force --ignore-scripts --no-audit
+              OVERRIDE_FALLBACK_APPLIED=true
+              REASONS="${REASONS} Fallback aplicado: lockfile regenerado com overrides já presentes."
             else
               REASONS="${REASONS} Fallback de overrides não necessário (vulnerabilidades resolvidas antes desta etapa)."
             fi
@@ -212,7 +214,7 @@ jobs:
                   ONLY_ALLOWED_FILES=false
                   ;;
               esac
-            done < <(git status --porcelain --untracked-files=no | awk '{print $2}')
+            done < <(git diff --name-only)
 
             if [ "$HAS_ALLOWED_LOCKFILE_CHANGE" = true ] && [ "$ONLY_ALLOWED_FILES" = true ]; then
               echo "has_changes=true" >> "$GITHUB_OUTPUT"
