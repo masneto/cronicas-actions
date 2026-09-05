@@ -152,8 +152,7 @@ jobs:
                 REASONS="${REASONS} Fallback de overrides executado, mas sem alteração no lockfile."
               fi
             elif [ "$AFTER_EXPLICIT" -gt 0 ] && [ "$NEEDS_OVERRIDE_FALLBACK" = true ]; then
-              rm -f package-lock.json
-              npm install --package-lock-only --force --ignore-scripts --no-audit
+              npm install --package-lock-only --force --ignore-scripts --no-audit --no-save "@actions/http-client@${OVERRIDE_HTTP_CLIENT_VERSION}" "undici@${OVERRIDE_UNDICI_VERSION}"
               RECHECK_OVERRIDE_JSON="$(mktemp)"
               npm audit --json > "$RECHECK_OVERRIDE_JSON" 2>/dev/null || true
               RELEVANT_AFTER_OVERRIDE=$(jq '(((.vulnerabilities // {}) | has("undici")) | if . then 1 else 0 end) + (((.vulnerabilities // {}) | has("@actions/http-client")) | if . then 1 else 0 end)' "$RECHECK_OVERRIDE_JSON" 2>/dev/null || echo 0)
@@ -232,6 +231,7 @@ jobs:
             echo "has_changes=false" >> "$GITHUB_OUTPUT"
           else
             HAS_AUDITED_LOCKFILE_CHANGE=false
+            HAS_CHANGELOG_CHANGE=false
             ONLY_ALLOWED_FILES=true
             while IFS= read -r FILE; do
               [ -z "$FILE" ] && continue
@@ -240,6 +240,7 @@ jobs:
                   HAS_AUDITED_LOCKFILE_CHANGE=true
                   ;;
                 "SECURITY_FIXES.md")
+                  HAS_CHANGELOG_CHANGE=true
                   ;;
                 *)
                   ONLY_ALLOWED_FILES=false
@@ -247,7 +248,7 @@ jobs:
               esac
             done < <(git diff --name-only)
 
-            if [ "$HAS_AUDITED_LOCKFILE_CHANGE" = true ] && [ "$ONLY_ALLOWED_FILES" = true ]; then
+            if [ "$ONLY_ALLOWED_FILES" = true ] && { [ "$HAS_AUDITED_LOCKFILE_CHANGE" = true ] || [ "$HAS_CHANGELOG_CHANGE" = true ]; }; then
               echo "has_changes=true" >> "$GITHUB_OUTPUT"
             else
               echo "has_changes=false" >> "$GITHUB_OUTPUT"
