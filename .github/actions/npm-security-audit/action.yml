@@ -1,3 +1,4 @@
+# CI validation marker
 name: 'NPM Security Audit'
 description: 'Audita dependencias npm, aplica correcoes e reporta vulnerabilidades e pacotes atualizados.'
 author: 'Cronicas Team'

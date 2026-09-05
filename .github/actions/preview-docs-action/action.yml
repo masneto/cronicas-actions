@@ -1,3 +1,4 @@
+# CI validation marker
 name: 'Docs Preview Deploy'
 description: 'Deploy de previews de PR para documentação'
 author: 'Cronicas Team'
