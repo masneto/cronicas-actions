@@ -1,4 +1,4 @@
-name: "[CRONICAS] Security Audit - Actions"
+name: "[Cronicas] Security Audit - Actions"
 
 on:
   schedule:
