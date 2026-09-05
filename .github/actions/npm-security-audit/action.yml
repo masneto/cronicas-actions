@@ -31,7 +31,7 @@ outputs:
     description: 'Caminho do JSON de auditoria capturado antes do fix.'
 
 runs:
-  using: 'node22'
+  using: 'node24'
   main: 'dist/index.js'
 
 branding:
