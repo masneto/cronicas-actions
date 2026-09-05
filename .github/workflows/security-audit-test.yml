@@ -52,14 +52,16 @@ jobs:
         shell: bash
         run: |
           echo "## Email Notification Action - Antes do fix" >> "$GITHUB_STEP_SUMMARY"
-          BEFORE=$(npm audit --json 2>/dev/null | jq '(.metadata.vulnerabilities.moderate // 0) + (.metadata.vulnerabilities.high // 0) + (.metadata.vulnerabilities.critical // 0)' 2>/dev/null || echo 0)
+          BEFORE=$(npm audit --json 2>/dev/null | jq '(.metadata.vulnerabilities.moderate // 0) + (.metadata.vulnerabilities.high // 0) + (.metadata.vulnerabilities.critical // 0)' 2>/dev/null || true)
+          BEFORE=${BEFORE:-0}
           npm audit --json 2>/dev/null | jq -r '.vulnerabilities | to_entries[] | "- **\(.key)** (\(.value.severity)): \(.value.via[0].title // .value.via[0])"' >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || true
 
           npm audit fix --force || true
 
           echo "" >> "$GITHUB_STEP_SUMMARY"
           echo "## Email Notification Action - Depois do fix" >> "$GITHUB_STEP_SUMMARY"
-          AFTER=$(npm audit --json 2>/dev/null | jq '(.metadata.vulnerabilities.moderate // 0) + (.metadata.vulnerabilities.high // 0) + (.metadata.vulnerabilities.critical // 0)' 2>/dev/null || echo 0)
+          AFTER=$(npm audit --json 2>/dev/null | jq '(.metadata.vulnerabilities.moderate // 0) + (.metadata.vulnerabilities.high // 0) + (.metadata.vulnerabilities.critical // 0)' 2>/dev/null || true)
+          AFTER=${AFTER:-0}
           FIXED=$((BEFORE - AFTER))
           echo "- Vulnerabilidades antes: **$BEFORE**" >> "$GITHUB_STEP_SUMMARY"
           echo "- Vulnerabilidades depois: **$AFTER**" >> "$GITHUB_STEP_SUMMARY"
@@ -80,14 +82,16 @@ jobs:
         shell: bash
         run: |
           echo "## NPM Security Audit Action - Antes do fix" >> "$GITHUB_STEP_SUMMARY"
-          BEFORE=$(npm audit --json 2>/dev/null | jq '(.metadata.vulnerabilities.moderate // 0) + (.metadata.vulnerabilities.high // 0) + (.metadata.vulnerabilities.critical // 0)' 2>/dev/null || echo 0)
+          BEFORE=$(npm audit --json 2>/dev/null | jq '(.metadata.vulnerabilities.moderate // 0) + (.metadata.vulnerabilities.high // 0) + (.metadata.vulnerabilities.critical // 0)' 2>/dev/null || true)
+          BEFORE=${BEFORE:-0}
           npm audit --json 2>/dev/null | jq -r '.vulnerabilities | to_entries[] | "- **\(.key)** (\(.value.severity)): \(.value.via[0].title // .value.via[0])"' >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || true
 
           npm audit fix --force || true
 
           echo "" >> "$GITHUB_STEP_SUMMARY"
           echo "## NPM Security Audit Action - Depois do fix" >> "$GITHUB_STEP_SUMMARY"
-          AFTER=$(npm audit --json 2>/dev/null | jq '(.metadata.vulnerabilities.moderate // 0) + (.metadata.vulnerabilities.high // 0) + (.metadata.vulnerabilities.critical // 0)' 2>/dev/null || echo 0)
+          AFTER=$(npm audit --json 2>/dev/null | jq '(.metadata.vulnerabilities.moderate // 0) + (.metadata.vulnerabilities.high // 0) + (.metadata.vulnerabilities.critical // 0)' 2>/dev/null || true)
+          AFTER=${AFTER:-0}
           FIXED=$((BEFORE - AFTER))
           echo "- Vulnerabilidades antes: **$BEFORE**" >> "$GITHUB_STEP_SUMMARY"
           echo "- Vulnerabilidades depois: **$AFTER**" >> "$GITHUB_STEP_SUMMARY"
@@ -108,14 +112,16 @@ jobs:
         shell: bash
         run: |
           echo "## Preview Docs Action - Antes do fix" >> "$GITHUB_STEP_SUMMARY"
-          BEFORE=$(npm audit --json 2>/dev/null | jq '(.metadata.vulnerabilities.moderate // 0) + (.metadata.vulnerabilities.high // 0) + (.metadata.vulnerabilities.critical // 0)' 2>/dev/null || echo 0)
+          BEFORE=$(npm audit --json 2>/dev/null | jq '(.metadata.vulnerabilities.moderate // 0) + (.metadata.vulnerabilities.high // 0) + (.metadata.vulnerabilities.critical // 0)' 2>/dev/null || true)
+          BEFORE=${BEFORE:-0}
           npm audit --json 2>/dev/null | jq -r '.vulnerabilities | to_entries[] | "- **\(.key)** (\(.value.severity)): \(.value.via[0].title // .value.via[0])"' >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || true
 
           npm audit fix --force || true
 
           echo "" >> "$GITHUB_STEP_SUMMARY"
           echo "## Preview Docs Action - Depois do fix" >> "$GITHUB_STEP_SUMMARY"
-          AFTER=$(npm audit --json 2>/dev/null | jq '(.metadata.vulnerabilities.moderate // 0) + (.metadata.vulnerabilities.high // 0) + (.metadata.vulnerabilities.critical // 0)' 2>/dev/null || echo 0)
+          AFTER=$(npm audit --json 2>/dev/null | jq '(.metadata.vulnerabilities.moderate // 0) + (.metadata.vulnerabilities.high // 0) + (.metadata.vulnerabilities.critical // 0)' 2>/dev/null || true)
+          AFTER=${AFTER:-0}
           FIXED=$((BEFORE - AFTER))
           echo "- Vulnerabilidades antes: **$BEFORE**" >> "$GITHUB_STEP_SUMMARY"
           echo "- Vulnerabilidades depois: **$AFTER**" >> "$GITHUB_STEP_SUMMARY"
@@ -136,14 +142,16 @@ jobs:
         shell: bash
         run: |
           echo "## Validate Repo Action - Antes do fix" >> "$GITHUB_STEP_SUMMARY"
-          BEFORE=$(npm audit --json 2>/dev/null | jq '(.metadata.vulnerabilities.moderate // 0) + (.metadata.vulnerabilities.high // 0) + (.metadata.vulnerabilities.critical // 0)' 2>/dev/null || echo 0)
+          BEFORE=$(npm audit --json 2>/dev/null | jq '(.metadata.vulnerabilities.moderate // 0) + (.metadata.vulnerabilities.high // 0) + (.metadata.vulnerabilities.critical // 0)' 2>/dev/null || true)
+          BEFORE=${BEFORE:-0}
           npm audit --json 2>/dev/null | jq -r '.vulnerabilities | to_entries[] | "- **\(.key)** (\(.value.severity)): \(.value.via[0].title // .value.via[0])"' >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || true
 
           npm audit fix --force || true
 
           echo "" >> "$GITHUB_STEP_SUMMARY"
           echo "## Validate Repo Action - Depois do fix" >> "$GITHUB_STEP_SUMMARY"
-          AFTER=$(npm audit --json 2>/dev/null | jq '(.metadata.vulnerabilities.moderate // 0) + (.metadata.vulnerabilities.high // 0) + (.metadata.vulnerabilities.critical // 0)' 2>/dev/null || echo 0)
+          AFTER=$(npm audit --json 2>/dev/null | jq '(.metadata.vulnerabilities.moderate // 0) + (.metadata.vulnerabilities.high // 0) + (.metadata.vulnerabilities.critical // 0)' 2>/dev/null || true)
+          AFTER=${AFTER:-0}
           FIXED=$((BEFORE - AFTER))
           echo "- Vulnerabilidades antes: **$BEFORE**" >> "$GITHUB_STEP_SUMMARY"
           echo "- Vulnerabilidades depois: **$AFTER**" >> "$GITHUB_STEP_SUMMARY"
