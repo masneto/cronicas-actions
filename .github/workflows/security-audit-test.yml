@@ -172,6 +172,7 @@ jobs:
               else
                 REASONS="${REASONS} Fallback com overrides existentes não reduziu as vulnerabilidades alvo."
               fi
+              rm -f "$RECHECK_OVERRIDE_JSON"
             elif [ "$AFTER_EXPLICIT" -gt 0 ]; then
               REASONS="${REASONS} Fallback de overrides não aplicável para as vulnerabilidades remanescentes."
             else
@@ -213,6 +214,7 @@ jobs:
             if [ -n "$REMAINING_LINES" ]; then
               CHANGELOG_ENTRIES="${CHANGELOG_ENTRIES}${REMAINING_LINES}"$'\n'
             fi
+            rm -f "$BEFORE_JSON" "$AFTER_FIX_JSON" "$AFTER_EXPLICIT_JSON" "$FINAL_JSON"
             popd >/dev/null
           done
 
@@ -240,6 +242,7 @@ jobs:
             echo "has_changes=false" >> "$GITHUB_OUTPUT"
           else
             HAS_AUDITED_LOCKFILE_CHANGE=false
+            HAS_AUDITED_MANIFEST_CHANGE=false
             HAS_CHANGELOG_CHANGE=false
             ONLY_ALLOWED_FILES=true
             while IFS= read -r FILE; do
@@ -252,6 +255,7 @@ jobs:
                   HAS_CHANGELOG_CHANGE=true
                   ;;
                 ".github/actions/email-notification-action/package.json"|".github/actions/npm-security-audit/package.json"|".github/actions/preview-docs-action/package.json"|".github/actions/validate-repo/package.json")
+                  HAS_AUDITED_MANIFEST_CHANGE=true
                   ;;
                 *)
                   ONLY_ALLOWED_FILES=false
@@ -259,7 +263,7 @@ jobs:
               esac
             done < <(git diff --name-only)
 
-            if [ "$ONLY_ALLOWED_FILES" = true ] && { [ "$HAS_AUDITED_LOCKFILE_CHANGE" = true ] || [ "$HAS_CHANGELOG_CHANGE" = true ]; }; then
+            if [ "$ONLY_ALLOWED_FILES" = true ] && { [ "$HAS_AUDITED_LOCKFILE_CHANGE" = true ] || [ "$HAS_AUDITED_MANIFEST_CHANGE" = true ] || [ "$HAS_CHANGELOG_CHANGE" = true ]; }; then
               echo "has_changes=true" >> "$GITHUB_OUTPUT"
             else
               echo "has_changes=false" >> "$GITHUB_OUTPUT"
