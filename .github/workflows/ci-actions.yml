@@ -88,7 +88,7 @@ jobs:
           echo "build-changes=$BUILD_CHANGES" >> "$GITHUB_OUTPUT"
 
       - name: Commit and Push Dist Changes
-        if: env.actions != '' && steps.process-actions.outputs.build-changes == 'true'
+        if: env.actions != '' || steps.process-actions.outputs.build-changes == 'true'
         continue-on-error: true
         run: |
           echo "::group::Commit and Push Dist Changes"
