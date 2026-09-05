@@ -45,6 +45,8 @@ jobs:
           DATE=$(date -u '+%Y-%m-%d')
           PIPELINE="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
           CHANGELOG_ENTRIES=""
+          OVERRIDE_HTTP_CLIENT_VERSION='^3.0.2'
+          OVERRIDE_UNDICI_VERSION='^6.28.1'
 
           audit_count() {
             local FILE="$1"
@@ -68,6 +70,8 @@ jobs:
             AFTER_FIX_JSON="$(mktemp)"
             FINAL_JSON="$(mktemp)"
             REASONS=""
+            EXPLICIT_FALLBACK_APPLIED=false
+            OVERRIDE_FALLBACK_APPLIED=false
 
             echo "Installing dependencies in $DIR"
             npm ci --prefix "$DIR" --no-audit --loglevel error
@@ -91,28 +95,33 @@ jobs:
             while IFS= read -r PACKAGE; do
               if [ -n "$PACKAGE" ]; then
                 npm install --package-lock-only --force --ignore-scripts --no-audit --no-save "$PACKAGE"
+                EXPLICIT_FALLBACK_APPLIED=true
               fi
             done <<< "$FIXES"
 
-            if [ -n "$FIXES" ]; then
-              REASONS="Fallback: atualização explícita via fixAvailable."
+            if [ "$EXPLICIT_FALLBACK_APPLIED" = true ]; then
+              REASONS="Fallback aplicado: atualização explícita via fixAvailable."
             fi
 
             cp package.json package.json.bak
-            node -e "const fs=require('fs');const p='package.json';const j=JSON.parse(fs.readFileSync(p,'utf8'));j.overrides={...(j.overrides||{}), '@actions/http-client':'^3.0.2', undici:'^6.28.1'};fs.writeFileSync(p, JSON.stringify(j,null,2)+'\n');"
-            set +e
+            restore_package_json() {
+              if [ -f package.json.bak ]; then
+                mv package.json.bak package.json
+              fi
+            }
+            trap restore_package_json EXIT
+            node -e "const fs=require('fs');const p='package.json';const j=JSON.parse(fs.readFileSync(p,'utf8'));j.overrides={...(j.overrides||{}), '@actions/http-client':'${OVERRIDE_HTTP_CLIENT_VERSION}', undici:'${OVERRIDE_UNDICI_VERSION}'};fs.writeFileSync(p, JSON.stringify(j,null,2)+'\n');"
             npm install --package-lock-only --force --ignore-scripts --no-audit
-            OVERRIDE_INSTALL_EXIT=$?
-            set -e
-            mv package.json.bak package.json
-            if [ "$OVERRIDE_INSTALL_EXIT" -ne 0 ]; then
-              exit "$OVERRIDE_INSTALL_EXIT"
-            fi
+            OVERRIDE_FALLBACK_APPLIED=true
+            restore_package_json
+            trap - EXIT
 
-            if [ -n "$REASONS" ]; then
-              REASONS="$REASONS Fallback: overrides para @actions/http-client e undici."
+            if [ "$OVERRIDE_FALLBACK_APPLIED" = true ] && [ -n "$REASONS" ]; then
+              REASONS="$REASONS Fallback aplicado: overrides para @actions/http-client e undici."
+            elif [ "$OVERRIDE_FALLBACK_APPLIED" = true ]; then
+              REASONS="Fallback aplicado: overrides para @actions/http-client e undici."
             else
-              REASONS="Fallback: overrides para @actions/http-client e undici."
+              REASONS="Nenhum fallback aplicado."
             fi
 
             npm audit --json > "$FINAL_JSON" 2>/dev/null || true
