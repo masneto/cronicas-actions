@@ -242,6 +242,8 @@ jobs:
                 "SECURITY_FIXES.md")
                   HAS_CHANGELOG_CHANGE=true
                   ;;
+                ".github/actions/email-notification-action/package.json"|".github/actions/npm-security-audit/package.json"|".github/actions/preview-docs-action/package.json"|".github/actions/validate-repo/package.json")
+                  ;;
                 *)
                   ONLY_ALLOWED_FILES=false
                   ;;
