@@ -18,7 +18,7 @@
   "license": "MIT",
   "dependencies": {
     "@actions/core": "^3.0.1",
-    "nodemailer": "^10.0.0",
+    "nodemailer": "^8.0.0",
     "typescript-eslint": "^8.60.1"
   },
   "devDependencies": {
