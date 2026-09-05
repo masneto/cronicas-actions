@@ -34,6 +34,11 @@ jobs:
             .github/actions/preview-docs-action/package-lock.json
             .github/actions/validate-repo/package-lock.json
 
+      - name: Capture baseline tracked changes
+        shell: bash
+        run: |
+          git status --porcelain --untracked-files=no | sort > .git/status-baseline.txt
+
       - name: Audit, fallback fix and validate actions
         id: audit
         shell: bash
@@ -241,6 +246,8 @@ jobs:
           if git diff --quiet; then
             echo "has_changes=false" >> "$GITHUB_OUTPUT"
           else
+            CURRENT_STATUS_FILE="$(mktemp)"
+            git status --porcelain --untracked-files=no | sort > "$CURRENT_STATUS_FILE"
             HAS_AUDITED_LOCKFILE_CHANGE=false
             HAS_AUDITED_MANIFEST_CHANGE=false
             HAS_CHANGELOG_CHANGE=false
@@ -261,7 +268,8 @@ jobs:
                   ONLY_ALLOWED_FILES=false
                   ;;
               esac
-            done < <(git diff --name-only)
+            done < <(comm -13 .git/status-baseline.txt "$CURRENT_STATUS_FILE" | awk '{print $2}')
+            rm -f "$CURRENT_STATUS_FILE"
 
             if [ "$ONLY_ALLOWED_FILES" = true ] && { [ "$HAS_AUDITED_LOCKFILE_CHANGE" = true ] || [ "$HAS_AUDITED_MANIFEST_CHANGE" = true ]; }; then
               echo "has_changes=true" >> "$GITHUB_OUTPUT"
