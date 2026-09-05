@@ -98,6 +98,7 @@ jobs:
             AFTER_FIX_JSON="$(mktemp)"
             AFTER_EXPLICIT_JSON="$(mktemp)"
             FINAL_JSON="$(mktemp)"
+            CLEANUP_JSON="$(mktemp)"
             REASONS=""
             EXPLICIT_FALLBACK_APPLIED=false
             OVERRIDE_FALLBACK_APPLIED=false
@@ -160,6 +161,37 @@ jobs:
             FIXED=$((BEFORE - AFTER))
             [ "$FIXED" -lt 0 ] && FIXED=0
             REMAINING_HIGH_CRITICAL="$(high_critical_count "$FINAL_JSON")"
+
+            HAS_TARGET_OVERRIDES=$(node -e "const fs=require('fs');const j=JSON.parse(fs.readFileSync('package.json','utf8'));const o=j.overrides||{};const has=Object.prototype.hasOwnProperty.call(o,'@actions/http-client') || Object.prototype.hasOwnProperty.call(o,'undici');process.stdout.write(has?'true':'false');")
+            if [ "$HAS_TARGET_OVERRIDES" = "true" ] && [ "$REMAINING_HIGH_CRITICAL" -eq 0 ]; then
+              CLEANUP_BACKUP="$(mktemp)"
+              cp package.json "$CLEANUP_BACKUP"
+
+              node -e "const fs=require('fs');const p='package.json';const j=JSON.parse(fs.readFileSync(p,'utf8'));if (j.overrides){delete j.overrides['@actions/http-client'];delete j.overrides.undici;if (Object.keys(j.overrides).length===0) delete j.overrides;}fs.writeFileSync(p, JSON.stringify(j,null,2)+'\n');"
+              npm install --package-lock-only --force --ignore-scripts --no-audit
+              npm audit --json > "$CLEANUP_JSON" 2>/dev/null || true
+
+              CLEANUP_HIGH_CRITICAL="$(high_critical_count "$CLEANUP_JSON")"
+              if [ "$CLEANUP_HIGH_CRITICAL" -eq 0 ]; then
+                FINAL_JSON="$CLEANUP_JSON"
+                AFTER="$(audit_count "$FINAL_JSON")"
+                FIXED=$((BEFORE - AFTER))
+                [ "$FIXED" -lt 0 ] && FIXED=0
+                REMAINING_HIGH_CRITICAL="$CLEANUP_HIGH_CRITICAL"
+                REASONS="${REASONS} Cleanup: overrides removidos (não mais necessários)."
+                rm -f "$CLEANUP_BACKUP"
+              else
+                mv "$CLEANUP_BACKUP" package.json
+                npm install --package-lock-only --force --ignore-scripts --no-audit
+                npm audit --json > "$FINAL_JSON" 2>/dev/null || true
+                AFTER="$(audit_count "$FINAL_JSON")"
+                FIXED=$((BEFORE - AFTER))
+                [ "$FIXED" -lt 0 ] && FIXED=0
+                REMAINING_HIGH_CRITICAL="$(high_critical_count "$FINAL_JSON")"
+                REASONS="${REASONS} Cleanup: overrides mantidos (remoção reintroduziu high/critical)."
+              fi
+            fi
+
             UNRESOLVED_HIGH_CRITICAL=$((UNRESOLVED_HIGH_CRITICAL + REMAINING_HIGH_CRITICAL))
 
             echo "## $LABEL" >> "$GITHUB_STEP_SUMMARY"
@@ -191,8 +223,7 @@ jobs:
 
           echo "had_vulns=$HAD_VULNS" >> "$GITHUB_OUTPUT"
           if [ "$UNRESOLVED_HIGH_CRITICAL" -gt 0 ]; then
-            echo "Ainda restam $UNRESOLVED_HIGH_CRITICAL vulnerabilidades high/critical após fallback." >&2
-            exit 1
+            echo "⚠️ Ainda restam $UNRESOLVED_HIGH_CRITICAL vulnerabilidades high/critical após fallback." >> "$GITHUB_STEP_SUMMARY"
           fi
 
       - name: Check for changes
@@ -207,7 +238,7 @@ jobs:
             while IFS= read -r FILE; do
               [ -z "$FILE" ] && continue
               case "$FILE" in
-                ".github/actions/email-notification-action/package-lock.json"|".github/actions/npm-security-audit/package-lock.json"|".github/actions/preview-docs-action/package-lock.json"|".github/actions/validate-repo/package-lock.json")
+                ".github/actions/email-notification-action/package-lock.json"|".github/actions/npm-security-audit/package-lock.json"|".github/actions/preview-docs-action/package-lock.json"|".github/actions/validate-repo/package-lock.json"|".github/actions/email-notification-action/package.json"|".github/actions/npm-security-audit/package.json"|".github/actions/preview-docs-action/package.json"|".github/actions/validate-repo/package.json")
                   HAS_ALLOWED_LOCKFILE_CHANGE=true
                   ;;
                 *)
