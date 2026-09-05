@@ -5,26 +5,17 @@
   "main": "dist/index.js",
   "scripts": {
     "build": "ncc build src/index.ts -o dist",
-    "test": "jest --passWithNoTests",
     "lint": "eslint ."
   },
   "dependencies": {
-    "@actions/core": "^1.11.1",
-    "@actions/exec": "^1.1.1"
+    "@actions/core": "^3.0.1",
+    "@actions/exec": "^3.0.0"
   },
   "devDependencies": {
-    "@types/jest": "^30.0.0",
-    "@types/node": "^18.19.3",
-    "@vercel/ncc": "^0.38.3",
-    "eslint": "^9.22.0",
-    "jest": "^30.0.0",
-    "ts-jest": "^29.4.11",
-    "typescript": "^5.8.2",
-    "typescript-eslint": "^8.60.1"
-  },
-  "jest": {
-    "preset": "ts-jest",
-    "testEnvironment": "node",
-    "moduleFileExtensions": ["ts", "js"]
+    "@types/node": "^26.4.1",
+    "@vercel/ncc": "^0.45.0",
+    "eslint": "^10.10.0",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.69.0"
   }
 }
