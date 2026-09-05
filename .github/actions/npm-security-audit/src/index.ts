@@ -8,10 +8,31 @@ type AuditResult = {
   metadata?: { vulnerabilities?: Record<string, number> };
   vulnerabilities?: Record<string, {
     severity?: string;
-    via?: Array<{ title?: string; range?: string } | string>;
-    fixAvailable?: { version?: string } | boolean;
+    via?: Array<{ title?: string; range?: string; url?: string } | string>;
+    fixAvailable?: { name?: string; version?: string } | boolean;
   }>;
 };
+
+type Vulnerability = NonNullable<NonNullable<AuditResult['vulnerabilities']>[string]>;
+
+function advisoryDetails(vulnerability: Vulnerability): Array<{ title: string; range: string; url: string }> {
+  return (vulnerability.via || []).map((detail) => {
+    if (typeof detail === 'string') return { title: detail, range: '?', url: '' };
+    return {
+      title: detail.title || 'sem detalhes',
+      range: detail.range || '?',
+      url: detail.url || '',
+    };
+  });
+}
+
+function fixVersion(vulnerability: Vulnerability): string {
+  if (vulnerability.fixAvailable === false) return 'nao disponivel';
+  if (typeof vulnerability.fixAvailable === 'object') {
+    return vulnerability.fixAvailable.version || 'disponivel';
+  }
+  return vulnerability.fixAvailable ? 'disponivel' : 'nao informado';
+}
 
 function vulnerabilityCount(audit: AuditResult): number {
   const vulnerabilities = audit.metadata?.vulnerabilities || {};
@@ -23,15 +44,9 @@ function vulnerabilityCount(audit: AuditResult): number {
 
 function vulnerabilityRows(audit: AuditResult): string[][] {
   return Object.entries(audit.vulnerabilities || {}).map(([name, vulnerability]) => {
-    const detail = vulnerability.via?.[0];
-    const title = typeof detail === 'string' ? detail : detail?.title || 'sem detalhes';
-    const range = typeof detail === 'string' ? '?' : detail?.range || '?';
-    const fix = vulnerability.fixAvailable === false
-      ? 'nao disponivel'
-      : typeof vulnerability.fixAvailable === 'object'
-        ? vulnerability.fixAvailable.version || 'disponivel'
-        : 'disponivel';
-    return [name, vulnerability.severity || 'unknown', title, range, fix];
+    const detail = advisoryDetails(vulnerability)[0] || { title: 'sem detalhes', range: '?', url: '' };
+    const title = detail.url ? `${detail.title} (${detail.url})` : detail.title;
+    return [name, vulnerability.severity || 'unknown', title, detail.range, fixVersion(vulnerability)];
   });
 }
 
@@ -50,12 +65,9 @@ function packageChanges(beforeFile: string, afterFile: string): string[] {
 
 function changelogEntries(audit: AuditResult, label: string): string[] {
   return Object.entries(audit.vulnerabilities || {}).map(([name, vulnerability]) => {
-    const detail = vulnerability.via?.[0];
-    const range = typeof detail === 'string' ? '?' : detail?.range || '?';
-    const title = typeof detail === 'string' ? detail : detail?.title || 'sem detalhes';
-    const fix = typeof vulnerability.fixAvailable === 'object'
-      ? vulnerability.fixAvailable.version || 'fixed'
-      : 'fixed';
+    const detail = advisoryDetails(vulnerability)[0] || { title: 'sem detalhes', range: '?' };
+    const fix = fixVersion(vulnerability);
+    const { range, title } = detail;
     return `- **${label}:** ${name} \`${range}\` -> \`${fix}\` - _${title}_ (${vulnerability.severity || 'unknown'})`;
   });
 }
@@ -90,9 +102,9 @@ function updateChangelog(file: string, audit: AuditResult, label: string): void 
   fs.writeFileSync(file, content);
 }
 
-async function runCommand(command: string, args: string[], cwd: string, outputFile?: string): Promise<void> {
+async function runCommand(command: string, args: string[], cwd: string, outputFile?: string): Promise<number> {
   let output = '';
-  await exec(command, args, {
+  const exitCode = await exec(command, args, {
     cwd,
     ignoreReturnCode: true,
     silent: true,
@@ -101,6 +113,7 @@ async function runCommand(command: string, args: string[], cwd: string, outputFi
     }
   });
   if (outputFile) fs.writeFileSync(outputFile, output || '{}');
+  return exitCode;
 }
 
 export async function run(): Promise<void> {
@@ -118,12 +131,19 @@ export async function run(): Promise<void> {
     const changelogPath = core.getInput('changelog-path');
 
     fs.writeFileSync(beforeLock, '');
-    await runCommand('npm', ['ci', '--no-audit', '--loglevel', 'error'], cwd);
-    await exec('git', ['show', `HEAD:${lockfilePath}`], {
+    const installExitCode = await runCommand('npm', ['ci', '--no-audit', '--loglevel', 'error'], cwd);
+    if (installExitCode !== 0) {
+      throw new Error(`npm ci falhou em ${workingDirectory} (exit code ${installExitCode}).`);
+    }
+    const gitShowExitCode = await exec('git', ['show', `HEAD:${lockfilePath}`], {
       cwd: workspace,
+      ignoreReturnCode: true,
       silent: true,
       listeners: { stdout: (data: Buffer) => fs.appendFileSync(beforeLock, data) }
     });
+    if (gitShowExitCode !== 0) {
+      throw new Error(`Nao foi possivel ler ${lockfilePath} no commit atual.`);
+    }
     await runCommand('npm', ['audit', '--json'], cwd, beforeAudit);
 
     const before = JSON.parse(fs.readFileSync(beforeAudit, 'utf8')) as AuditResult;
