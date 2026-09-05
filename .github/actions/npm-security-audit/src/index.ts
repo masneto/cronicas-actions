@@ -154,8 +154,7 @@ export async function run(): Promise<void> {
     await runCommand('npm', force ? ['audit', 'fix', '--force'] : ['audit', 'fix'], cwd);
     await runCommand('npm', ['audit', '--json'], cwd, afterAudit);
 
-    let after = JSON.parse(fs.readFileSync(afterAudit, 'utf8')) as AuditResult;
-    const afterCount = vulnerabilityCount(after);
+    const after = JSON.parse(fs.readFileSync(afterAudit, 'utf8')) as AuditResult;
     const changes = packageChanges(beforeLock, afterLock);
     const finalCount = vulnerabilityCount(after);
     core.info(`${label}: ${finalCount} vulnerabilidade(s) depois do fix; ${changes.length} pacote(s) atualizado(s).`);

@@ -25707,13 +25707,6 @@ function fixVersion(vulnerability) {
     }
     return vulnerability.fixAvailable ? 'disponivel' : 'nao informado';
 }
-function availableFixes(audit, allowMajor) {
-    return [...new Set(Object.values(audit.vulnerabilities || {})
-            .map((vulnerability) => vulnerability.fixAvailable)
-            .filter((fix) => (typeof fix === 'object' && typeof fix.name === 'string' && typeof fix.version === 'string' &&
-            (allowMajor || fix.isSemVerMajor !== true)))
-            .map((fix) => `${fix.name}@${fix.version}`))];
-}
 function vulnerabilityCount(audit) {
     const vulnerabilities = audit.metadata?.vulnerabilities || {};
     return ['moderate', 'high', 'critical'].reduce((total, severity) => total + (vulnerabilities[severity] || 0), 0);
@@ -25824,19 +25817,7 @@ async function run() {
         const force = core.getInput('force') !== 'false';
         await runCommand('npm', force ? ['audit', 'fix', '--force'] : ['audit', 'fix'], cwd);
         await runCommand('npm', ['audit', '--json'], cwd, afterAudit);
-        let after = JSON.parse(fs.readFileSync(afterAudit, 'utf8'));
-        const afterCount = vulnerabilityCount(after);
-        const fixes = availableFixes(after, force);
-        if (afterCount > 0 && fixes.length) {
-            core.info(`${label}: aplicando ${fixes.length} correcao(oes) recomendada(s) pelo npm audit.`);
-            for (const fix of fixes) {
-                await runCommand('npm', [
-                    'install', fix, '--save-exact', '--ignore-scripts', '--no-audit', '--no-fund'
-                ], cwd);
-            }
-            await runCommand('npm', ['audit', '--json'], cwd, afterAudit);
-            after = JSON.parse(fs.readFileSync(afterAudit, 'utf8'));
-        }
+        const after = JSON.parse(fs.readFileSync(afterAudit, 'utf8'));
         const changes = packageChanges(beforeLock, afterLock);
         const finalCount = vulnerabilityCount(after);
         core.info(`${label}: ${finalCount} vulnerabilidade(s) depois do fix; ${changes.length} pacote(s) atualizado(s).`);
@@ -25845,10 +25826,10 @@ async function run() {
         core.setOutput('after', finalCount);
         core.setOutput('audit-before-file', beforeAudit);
         if (changelogPath && beforeCount > 0) {
-            updateChangelog(path.resolve(workspace, changelogPath), before, label);
+            updateChangelog(path.resolve(workspace, changelogPath), after, label);
         }
         core.summary.addHeading(label, 2);
-        core.summary.addRaw(`**Antes do fix:** ${beforeCount} vulnerabilidade(s)`);
+        core.summary.addRaw(`**Antes do fix:** ${beforeCount} vulnerabilidade(s)`).addEOL();
         const beforeRows = vulnerabilityRows(before);
         if (beforeRows.length) {
             core.summary.addTable([
@@ -25865,7 +25846,7 @@ async function run() {
         else {
             core.summary.addRaw('_Nenhuma vulnerabilidade encontrada._');
         }
-        core.summary.addRaw(`**Depois do fix:** ${afterCount} vulnerabilidade(s)`);
+        core.summary.addRaw(`**Depois do fix:** ${finalCount} vulnerabilidade(s)`).addEOL();
         const afterRows = vulnerabilityRows(after);
         if (afterRows.length) {
             core.summary.addTable([
@@ -25882,7 +25863,7 @@ async function run() {
         else {
             core.summary.addRaw('_Nenhuma vulnerabilidade restante._');
         }
-        core.summary.addHeading('Packages atualizados', 3);
+        core.summary.addEOL().addHeading('Packages atualizados', 3);
         if (changes.length) {
             core.summary.addList(changes.map((change) => change.replace(/^- /, '')));
         }
