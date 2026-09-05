@@ -49,7 +49,9 @@ jobs:
 
       - name: Process Actions and Commit Changes
         if: env.actions != ''
+        id: process-actions
         run: |
+          BUILD_CHANGES=false
           for action in ${{ env.actions }}; do
             echo "::group::Processing $action"
             cd "$action"
@@ -69,6 +71,13 @@ jobs:
 
               echo "Building action..."
               npm run build
+
+              if git diff --quiet -- dist/index.js; then
+                echo "Build result for $action: no changes in dist/index.js."
+              else
+                echo "Build result for $action: dist/index.js was updated."
+                BUILD_CHANGES=true
+              fi
             else
               echo "Skipping $action (no package.json found)"
             fi
@@ -76,9 +85,10 @@ jobs:
             cd - > /dev/null
             echo "::endgroup::"
           done
+          echo "build-changes=$BUILD_CHANGES" >> "$GITHUB_OUTPUT"
 
       - name: Commit and Push Dist Changes
-        if: env.actions != ''
+        if: env.actions != '' && steps.process-actions.outputs.build-changes == 'true'
         continue-on-error: true
         run: |
           echo "::group::Commit and Push Dist Changes"
@@ -94,7 +104,7 @@ jobs:
           echo "::endgroup::"
 
       - name: Create Pull Request with all action builds
-        if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.publish == true
+        if: steps.process-actions.outputs.build-changes == 'true' && github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.publish == true
         id: create-pr
         uses: peter-evans/create-pull-request@v8
         with:
