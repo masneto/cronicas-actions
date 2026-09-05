@@ -103,24 +103,29 @@ jobs:
               REASONS="Fallback aplicado: atualização explícita via fixAvailable."
             fi
 
-            cp package.json package.json.bak
-            restore_package_json() {
-              if [ -f package.json.bak ]; then
-                mv package.json.bak package.json
-              fi
-            }
-            trap restore_package_json EXIT
-            node -e "const fs=require('fs');const p='package.json';const j=JSON.parse(fs.readFileSync(p,'utf8'));j.overrides={...(j.overrides||{}), '@actions/http-client':'${OVERRIDE_HTTP_CLIENT_VERSION}', undici:'${OVERRIDE_UNDICI_VERSION}'};fs.writeFileSync(p, JSON.stringify(j,null,2)+'\n');"
-            npm install --package-lock-only --force --ignore-scripts --no-audit
-            OVERRIDE_FALLBACK_APPLIED=true
-            restore_package_json
-            trap - EXIT
+            EXISTING_OVERRIDE_KEYS=$(node -e "const fs=require('fs');const j=JSON.parse(fs.readFileSync('package.json','utf8'));const o=j.overrides||{};const keys=[];if (Object.prototype.hasOwnProperty.call(o,'@actions/http-client')) keys.push('@actions/http-client'); if (Object.prototype.hasOwnProperty.call(o,'undici')) keys.push('undici'); process.stdout.write(keys.join(','));")
+            if [ -z "$EXISTING_OVERRIDE_KEYS" ]; then
+              cp package.json package.json.bak
+              restore_package_json() {
+                if [ -f package.json.bak ]; then
+                  mv package.json.bak package.json
+                fi
+              }
+              trap restore_package_json EXIT
+              node -e "const fs=require('fs');const p='package.json';const j=JSON.parse(fs.readFileSync(p,'utf8'));j.overrides={...(j.overrides||{}), '@actions/http-client':'${OVERRIDE_HTTP_CLIENT_VERSION}', undici:'${OVERRIDE_UNDICI_VERSION}'};fs.writeFileSync(p, JSON.stringify(j,null,2)+'\n');"
+              npm install --package-lock-only --force --ignore-scripts --no-audit
+              OVERRIDE_FALLBACK_APPLIED=true
+              restore_package_json
+              trap - EXIT
+            else
+              REASONS="${REASONS} Fallback de overrides ignorado (chaves já existentes: ${EXISTING_OVERRIDE_KEYS})."
+            fi
 
             if [ "$OVERRIDE_FALLBACK_APPLIED" = true ] && [ -n "$REASONS" ]; then
               REASONS="$REASONS Fallback aplicado: overrides para @actions/http-client e undici."
             elif [ "$OVERRIDE_FALLBACK_APPLIED" = true ]; then
               REASONS="Fallback aplicado: overrides para @actions/http-client e undici."
-            else
+            elif [ -z "$REASONS" ]; then
               REASONS="Nenhum fallback aplicado."
             fi
 
