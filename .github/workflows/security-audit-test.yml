@@ -34,198 +34,210 @@ jobs:
             .github/actions/preview-docs-action/package-lock.json
             .github/actions/validate-repo/package-lock.json
 
-      - name: Install dependencies
+      - name: Capture baseline tracked changes
         shell: bash
         run: |
-          for directory in \
-            .github/actions/email-notification-action \
-            .github/actions/npm-security-audit \
-            .github/actions/preview-docs-action \
-            .github/actions/validate-repo; do
-            echo "Installing dependencies in $directory"
-            npm ci --prefix "$directory"
-          done
+          git status --porcelain --untracked-files=no | sort > .git/status-baseline.txt
 
-      - name: Fix email notification vulnerabilities and report details
-        id: email
-        working-directory: .github/actions/email-notification-action
+      - name: Audit, fallback fix and validate actions
+        id: audit
         shell: bash
         run: |
-          echo "## Email Notification Action - Antes do fix" >> "$GITHUB_STEP_SUMMARY"
-          BEFORE=$(npm audit --json 2>/dev/null | jq '(.metadata.vulnerabilities.moderate // 0) + (.metadata.vulnerabilities.high // 0) + (.metadata.vulnerabilities.critical // 0)' 2>/dev/null || true)
-          BEFORE=${BEFORE:-0}
-          npm audit --json 2>/dev/null | jq -r '.vulnerabilities | to_entries[] | "- **\(.key)** (\(.value.severity)): \(.value.via[0].title // .value.via[0])"' >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || true
+          set -eo pipefail
 
-          npm audit fix --force || true
-          FIXES=$(npm audit --json 2>/dev/null | jq -r '
-            .vulnerabilities | to_entries[]
-            | .value.fixAvailable
-            | select(type == "object" and .name and .version)
-            | "\(.name)@\(.version)"
-          ' | sort -u || true)
-          while IFS= read -r PACKAGE; do
-            [ -n "$PACKAGE" ] && npm install --package-lock-only --force --ignore-scripts --no-audit "$PACKAGE"
-          done <<< "$FIXES"
-
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "## Email Notification Action - Depois do fix" >> "$GITHUB_STEP_SUMMARY"
-          AFTER=$(npm audit --json 2>/dev/null | jq '(.metadata.vulnerabilities.moderate // 0) + (.metadata.vulnerabilities.high // 0) + (.metadata.vulnerabilities.critical // 0)' 2>/dev/null || true)
-          AFTER=${AFTER:-0}
-          FIXED=$((BEFORE - AFTER))
-          echo "- Vulnerabilidades antes: **$BEFORE**" >> "$GITHUB_STEP_SUMMARY"
-          echo "- Vulnerabilidades depois: **$AFTER**" >> "$GITHUB_STEP_SUMMARY"
-          echo "- Corrigidas automaticamente: **$FIXED** ✅" >> "$GITHUB_STEP_SUMMARY"
-
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "## Email Notification Action - Packages atualizados" >> "$GITHUB_STEP_SUMMARY"
-          PKGS=$(git diff -- .github/actions/email-notification-action/package-lock.json | grep -E '^\+\s+"version"' | awk -F'"' '{print "- " $4}' | sort -u || true)
-          [ -n "$PKGS" ] && echo "$PKGS" >> "$GITHUB_STEP_SUMMARY" || echo "_Nenhuma mudança_" >> "$GITHUB_STEP_SUMMARY"
-
-          if [ "$BEFORE" -gt 0 ] 2>/dev/null; then
-            echo "had_vulns=true" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Fix npm security audit vulnerabilities and report details
-        id: security
-        working-directory: .github/actions/npm-security-audit
-        shell: bash
-        run: |
-          echo "## NPM Security Audit Action - Antes do fix" >> "$GITHUB_STEP_SUMMARY"
-          BEFORE=$(npm audit --json 2>/dev/null | jq '(.metadata.vulnerabilities.moderate // 0) + (.metadata.vulnerabilities.high // 0) + (.metadata.vulnerabilities.critical // 0)' 2>/dev/null || true)
-          BEFORE=${BEFORE:-0}
-          npm audit --json 2>/dev/null | jq -r '.vulnerabilities | to_entries[] | "- **\(.key)** (\(.value.severity)): \(.value.via[0].title // .value.via[0])"' >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || true
-
-          npm audit fix --force || true
-          FIXES=$(npm audit --json 2>/dev/null | jq -r '
-            .vulnerabilities | to_entries[]
-            | .value.fixAvailable
-            | select(type == "object" and .name and .version)
-            | "\(.name)@\(.version)"
-          ' | sort -u || true)
-          while IFS= read -r PACKAGE; do
-            [ -n "$PACKAGE" ] && npm install --package-lock-only --force --ignore-scripts --no-audit "$PACKAGE"
-          done <<< "$FIXES"
-
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "## NPM Security Audit Action - Depois do fix" >> "$GITHUB_STEP_SUMMARY"
-          AFTER=$(npm audit --json 2>/dev/null | jq '(.metadata.vulnerabilities.moderate // 0) + (.metadata.vulnerabilities.high // 0) + (.metadata.vulnerabilities.critical // 0)' 2>/dev/null || true)
-          AFTER=${AFTER:-0}
-          FIXED=$((BEFORE - AFTER))
-          echo "- Vulnerabilidades antes: **$BEFORE**" >> "$GITHUB_STEP_SUMMARY"
-          echo "- Vulnerabilidades depois: **$AFTER**" >> "$GITHUB_STEP_SUMMARY"
-          echo "- Corrigidas automaticamente: **$FIXED** ✅" >> "$GITHUB_STEP_SUMMARY"
-
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "## NPM Security Audit Action - Packages atualizados" >> "$GITHUB_STEP_SUMMARY"
-          PKGS=$(git diff -- .github/actions/npm-security-audit/package-lock.json | grep -E '^\+\s+"version"' | awk -F'"' '{print "- " $4}' | sort -u || true)
-          [ -n "$PKGS" ] && echo "$PKGS" >> "$GITHUB_STEP_SUMMARY" || echo "_Nenhuma mudança_" >> "$GITHUB_STEP_SUMMARY"
-
-          if [ "$BEFORE" -gt 0 ] 2>/dev/null; then
-            echo "had_vulns=true" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Fix preview docs vulnerabilities and report details
-        id: preview
-        working-directory: .github/actions/preview-docs-action
-        shell: bash
-        run: |
-          echo "## Preview Docs Action - Antes do fix" >> "$GITHUB_STEP_SUMMARY"
-          BEFORE=$(npm audit --json 2>/dev/null | jq '(.metadata.vulnerabilities.moderate // 0) + (.metadata.vulnerabilities.high // 0) + (.metadata.vulnerabilities.critical // 0)' 2>/dev/null || true)
-          BEFORE=${BEFORE:-0}
-          npm audit --json 2>/dev/null | jq -r '.vulnerabilities | to_entries[] | "- **\(.key)** (\(.value.severity)): \(.value.via[0].title // .value.via[0])"' >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || true
-
-          npm audit fix --force || true
-          FIXES=$(npm audit --json 2>/dev/null | jq -r '
-            .vulnerabilities | to_entries[]
-            | .value.fixAvailable
-            | select(type == "object" and .name and .version)
-            | "\(.name)@\(.version)"
-          ' | sort -u || true)
-          while IFS= read -r PACKAGE; do
-            [ -n "$PACKAGE" ] && npm install --package-lock-only --force --ignore-scripts --no-audit "$PACKAGE"
-          done <<< "$FIXES"
-
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "## Preview Docs Action - Depois do fix" >> "$GITHUB_STEP_SUMMARY"
-          AFTER=$(npm audit --json 2>/dev/null | jq '(.metadata.vulnerabilities.moderate // 0) + (.metadata.vulnerabilities.high // 0) + (.metadata.vulnerabilities.critical // 0)' 2>/dev/null || true)
-          AFTER=${AFTER:-0}
-          FIXED=$((BEFORE - AFTER))
-          echo "- Vulnerabilidades antes: **$BEFORE**" >> "$GITHUB_STEP_SUMMARY"
-          echo "- Vulnerabilidades depois: **$AFTER**" >> "$GITHUB_STEP_SUMMARY"
-          echo "- Corrigidas automaticamente: **$FIXED** ✅" >> "$GITHUB_STEP_SUMMARY"
-
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "## Preview Docs Action - Packages atualizados" >> "$GITHUB_STEP_SUMMARY"
-          PKGS=$(git diff -- .github/actions/preview-docs-action/package-lock.json | grep -E '^\+\s+"version"' | awk -F'"' '{print "- " $4}' | sort -u || true)
-          [ -n "$PKGS" ] && echo "$PKGS" >> "$GITHUB_STEP_SUMMARY" || echo "_Nenhuma mudança_" >> "$GITHUB_STEP_SUMMARY"
-
-          if [ "$BEFORE" -gt 0 ] 2>/dev/null; then
-            echo "had_vulns=true" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Fix validate repo vulnerabilities and report details
-        id: validate
-        working-directory: .github/actions/validate-repo
-        shell: bash
-        run: |
-          echo "## Validate Repo Action - Antes do fix" >> "$GITHUB_STEP_SUMMARY"
-          BEFORE=$(npm audit --json 2>/dev/null | jq '(.metadata.vulnerabilities.moderate // 0) + (.metadata.vulnerabilities.high // 0) + (.metadata.vulnerabilities.critical // 0)' 2>/dev/null || true)
-          BEFORE=${BEFORE:-0}
-          npm audit --json 2>/dev/null | jq -r '.vulnerabilities | to_entries[] | "- **\(.key)** (\(.value.severity)): \(.value.via[0].title // .value.via[0])"' >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || true
-
-          npm audit fix --force || true
-          FIXES=$(npm audit --json 2>/dev/null | jq -r '
-            .vulnerabilities | to_entries[]
-            | .value.fixAvailable
-            | select(type == "object" and .name and .version)
-            | "\(.name)@\(.version)"
-          ' | sort -u || true)
-          while IFS= read -r PACKAGE; do
-            [ -n "$PACKAGE" ] && npm install --package-lock-only --force --ignore-scripts --no-audit "$PACKAGE"
-          done <<< "$FIXES"
-
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "## Validate Repo Action - Depois do fix" >> "$GITHUB_STEP_SUMMARY"
-          AFTER=$(npm audit --json 2>/dev/null | jq '(.metadata.vulnerabilities.moderate // 0) + (.metadata.vulnerabilities.high // 0) + (.metadata.vulnerabilities.critical // 0)' 2>/dev/null || true)
-          AFTER=${AFTER:-0}
-          FIXED=$((BEFORE - AFTER))
-          echo "- Vulnerabilidades antes: **$BEFORE**" >> "$GITHUB_STEP_SUMMARY"
-          echo "- Vulnerabilidades depois: **$AFTER**" >> "$GITHUB_STEP_SUMMARY"
-          echo "- Corrigidas automaticamente: **$FIXED** ✅" >> "$GITHUB_STEP_SUMMARY"
-
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "## Validate Repo Action - Packages atualizados" >> "$GITHUB_STEP_SUMMARY"
-          PKGS=$(git diff -- .github/actions/validate-repo/package-lock.json | grep -E '^\+\s+"version"' | awk -F'"' '{print "- " $4}' | sort -u || true)
-          [ -n "$PKGS" ] && echo "$PKGS" >> "$GITHUB_STEP_SUMMARY" || echo "_Nenhuma mudança_" >> "$GITHUB_STEP_SUMMARY"
-
-          if [ "$BEFORE" -gt 0 ] 2>/dev/null; then
-            echo "had_vulns=true" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Append to security fixes changelog
-        if: steps.email.outputs.had_vulns == 'true' || steps.security.outputs.had_vulns == 'true' || steps.preview.outputs.had_vulns == 'true' || steps.validate.outputs.had_vulns == 'true'
-        shell: bash
-        run: |
+          HAD_VULNS=false
+          UNRESOLVED_HIGH_CRITICAL=0
           DATE=$(date -u '+%Y-%m-%d')
           PIPELINE="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          CHANGELOG_ENTRIES=""
+          OVERRIDE_HTTP_CLIENT_VERSION='^3.0.2'
+          OVERRIDE_UNDICI_VERSION='^6.28.1'
 
-          build_entries() {
-            local DIR=$1 LABEL=$2
-            cd "$DIR"
-            npm audit --json 2>/dev/null | jq -r --arg label "$LABEL" '
-              .vulnerabilities | to_entries[]
-              | "- **\($label):** \(.key) `\(.value.via[0].range // "?")` → disponível: `\(.value.fixAvailable.version // "não informado")` — _\(.value.via[0].title // \(.value.via[0] // "sem detalhes"))_ (\(.value.severity), remanescente após o fix)"
-            ' 2>/dev/null || true
-            cd - > /dev/null
+          audit_count() {
+            local FILE="$1"
+            jq '(.metadata.vulnerabilities.moderate // 0) + (.metadata.vulnerabilities.high // 0) + (.metadata.vulnerabilities.critical // 0)' "$FILE" 2>/dev/null || echo 0
           }
 
-          ENTRIES=""
-          ENTRIES+="$(build_entries .github/actions/email-notification-action 'Email Notification Action')\n"
-          ENTRIES+="$(build_entries .github/actions/npm-security-audit 'NPM Security Audit Action')\n"
-          ENTRIES+="$(build_entries .github/actions/preview-docs-action 'Preview Docs Action')\n"
-          ENTRIES+="$(build_entries .github/actions/validate-repo 'Validate Repo Action')\n"
+          high_critical_count() {
+            local FILE="$1"
+            jq '(.metadata.vulnerabilities.high // 0) + (.metadata.vulnerabilities.critical // 0)' "$FILE" 2>/dev/null || echo 0
+          }
 
-          printf "\n## %s\n%b- Pipeline: %s\n" "$DATE" "$ENTRIES" "$PIPELINE" >> SECURITY_FIXES.md
+          apply_override_fallback() {
+            local BACKUP_FILE
+            BACKUP_FILE="$(mktemp)"
+            cp package.json "$BACKUP_FILE"
+            restore_package_json() {
+              if [ -f "$BACKUP_FILE" ]; then
+                mv "$BACKUP_FILE" package.json
+              fi
+            }
+            trap restore_package_json EXIT INT TERM
+
+            set +e
+            node -e "const fs=require('fs');const p='package.json';const j=JSON.parse(fs.readFileSync(p,'utf8'));j.overrides=j.overrides||{};if (j.overrides['@actions/http-client'] !== '${OVERRIDE_HTTP_CLIENT_VERSION}') j.overrides['@actions/http-client']='${OVERRIDE_HTTP_CLIENT_VERSION}'; if (j.overrides.undici !== '${OVERRIDE_UNDICI_VERSION}') j.overrides.undici='${OVERRIDE_UNDICI_VERSION}';fs.writeFileSync(p, JSON.stringify(j,null,2)+'\n');"
+            local NODE_EXIT=$?
+            local INSTALL_EXIT=0
+            if [ "$NODE_EXIT" -eq 0 ]; then
+              npm install --package-lock-only --force --ignore-scripts --no-audit
+              INSTALL_EXIT=$?
+            else
+              INSTALL_EXIT=$NODE_EXIT
+            fi
+            set -e
+
+            restore_package_json
+            trap - EXIT INT TERM
+            return "$INSTALL_EXIT"
+          }
+
+          for SPEC in \
+            "Email Notification Action|.github/actions/email-notification-action" \
+            "NPM Security Audit Action|.github/actions/npm-security-audit" \
+            "Preview Docs Action|.github/actions/preview-docs-action" \
+            "Validate Repo Action|.github/actions/validate-repo"; do
+
+            LABEL="${SPEC%%|*}"
+            DIR="${SPEC##*|}"
+            BEFORE_JSON="$(mktemp)"
+            AFTER_FIX_JSON="$(mktemp)"
+            AFTER_EXPLICIT_JSON="$(mktemp)"
+            FINAL_JSON="$(mktemp)"
+            REASONS=""
+            EXPLICIT_FALLBACK_APPLIED=false
+            OVERRIDE_FALLBACK_APPLIED=false
+
+            echo "Installing dependencies in $DIR"
+            npm ci --prefix "$DIR" --no-audit --loglevel error
+
+            pushd "$DIR" >/dev/null
+            npm audit --json > "$BEFORE_JSON" 2>/dev/null || true
+            BEFORE="$(audit_count "$BEFORE_JSON")"
+            [ "$BEFORE" -gt 0 ] && HAD_VULNS=true
+
+            npm audit fix --force || true
+            npm audit --json > "$AFTER_FIX_JSON" 2>/dev/null || true
+
+            FIXES="$(jq -r '
+              .vulnerabilities
+              | to_entries[]
+              | .value.fixAvailable
+              | select(type == "object" and .name and .version)
+              | "\(.name)@\(.version)"
+            ' "$AFTER_FIX_JSON" 2>/dev/null | sort -u || true)"
+
+            while IFS= read -r PACKAGE; do
+              if [ -n "$PACKAGE" ]; then
+                npm install --package-lock-only --force --ignore-scripts --no-audit --no-save "$PACKAGE"
+                EXPLICIT_FALLBACK_APPLIED=true
+              fi
+            done <<< "$FIXES"
+            npm audit --json > "$AFTER_EXPLICIT_JSON" 2>/dev/null || true
+            AFTER_EXPLICIT="$(audit_count "$AFTER_EXPLICIT_JSON")"
+            NEEDS_OVERRIDE_FALLBACK=false
+            if jq -e '((.vulnerabilities // {}) | has("undici")) or ((.vulnerabilities // {}) | has("@actions/http-client"))' "$AFTER_EXPLICIT_JSON" >/dev/null 2>&1; then
+              NEEDS_OVERRIDE_FALLBACK=true
+            fi
+            RELEVANT_BEFORE_OVERRIDE=$(jq '(((.vulnerabilities // {}) | has("undici")) | if . then 1 else 0 end) + (((.vulnerabilities // {}) | has("@actions/http-client")) | if . then 1 else 0 end)' "$AFTER_EXPLICIT_JSON" 2>/dev/null || echo 0)
+
+            if [ "$EXPLICIT_FALLBACK_APPLIED" = true ]; then
+              REASONS="Fallback aplicado: atualização explícita via fixAvailable."
+            fi
+
+            LOCKFILE_HASH_BEFORE_OVERRIDE="$(sha256sum package-lock.json 2>/dev/null | awk '{print $1}')"
+            OVERRIDE_KEYS_TO_APPLY=$(node -e "const fs=require('fs');const j=JSON.parse(fs.readFileSync('package.json','utf8'));const o=j.overrides||{};const keys=[];if (o['@actions/http-client'] !== '${OVERRIDE_HTTP_CLIENT_VERSION}') keys.push('@actions/http-client'); if (o.undici !== '${OVERRIDE_UNDICI_VERSION}') keys.push('undici'); process.stdout.write(keys.join(','));")
+            if [ "$AFTER_EXPLICIT" -gt 0 ] && [ "$NEEDS_OVERRIDE_FALLBACK" = true ] && [ -n "$OVERRIDE_KEYS_TO_APPLY" ]; then
+              if ! apply_override_fallback; then
+                exit 1
+              fi
+              LOCKFILE_HASH_AFTER_OVERRIDE="$(sha256sum package-lock.json 2>/dev/null | awk '{print $1}')"
+              if [ "$LOCKFILE_HASH_AFTER_OVERRIDE" != "$LOCKFILE_HASH_BEFORE_OVERRIDE" ]; then
+                OVERRIDE_FALLBACK_APPLIED=true
+              else
+                REASONS="${REASONS} Fallback de overrides executado, mas sem alteração no lockfile."
+              fi
+            elif [ "$AFTER_EXPLICIT" -gt 0 ] && [ "$NEEDS_OVERRIDE_FALLBACK" = true ]; then
+              OVERRIDE_REFRESH_PACKAGES=()
+              if jq -e '(.vulnerabilities // {}) | has("@actions/http-client")' "$AFTER_EXPLICIT_JSON" >/dev/null 2>&1; then
+                OVERRIDE_REFRESH_PACKAGES+=("@actions/http-client@${OVERRIDE_HTTP_CLIENT_VERSION}")
+              fi
+              if jq -e '(.vulnerabilities // {}) | has("undici")' "$AFTER_EXPLICIT_JSON" >/dev/null 2>&1; then
+                OVERRIDE_REFRESH_PACKAGES+=("undici@${OVERRIDE_UNDICI_VERSION}")
+              fi
+              if [ "${#OVERRIDE_REFRESH_PACKAGES[@]}" -gt 0 ]; then
+                npm install --package-lock-only --force --ignore-scripts --no-audit --no-save "${OVERRIDE_REFRESH_PACKAGES[@]}"
+              fi
+              RECHECK_OVERRIDE_JSON="$(mktemp)"
+              npm audit --json > "$RECHECK_OVERRIDE_JSON" 2>/dev/null || true
+              RELEVANT_AFTER_OVERRIDE=$(jq '(((.vulnerabilities // {}) | has("undici")) | if . then 1 else 0 end) + (((.vulnerabilities // {}) | has("@actions/http-client")) | if . then 1 else 0 end)' "$RECHECK_OVERRIDE_JSON" 2>/dev/null || echo 0)
+              LOCKFILE_HASH_AFTER_OVERRIDE="$(sha256sum package-lock.json 2>/dev/null | awk '{print $1}')"
+              if [ "$RELEVANT_AFTER_OVERRIDE" -lt "$RELEVANT_BEFORE_OVERRIDE" ] && [ "$LOCKFILE_HASH_AFTER_OVERRIDE" != "$LOCKFILE_HASH_BEFORE_OVERRIDE" ]; then
+                OVERRIDE_FALLBACK_APPLIED=true
+                REASONS="${REASONS} Fallback aplicado: lockfile regenerado com overrides já presentes."
+              else
+                REASONS="${REASONS} Fallback com overrides existentes não reduziu as vulnerabilidades alvo."
+              fi
+              rm -f "$RECHECK_OVERRIDE_JSON"
+            elif [ "$AFTER_EXPLICIT" -gt 0 ]; then
+              REASONS="${REASONS} Fallback de overrides não aplicável para as vulnerabilidades remanescentes."
+            else
+              REASONS="${REASONS} Fallback de overrides não necessário (vulnerabilidades resolvidas antes desta etapa)."
+            fi
+
+            if [ "$OVERRIDE_FALLBACK_APPLIED" = true ] && [ -n "$REASONS" ]; then
+              REASONS="$REASONS Fallback aplicado: overrides para @actions/http-client e undici."
+            elif [ "$OVERRIDE_FALLBACK_APPLIED" = true ]; then
+              REASONS="Fallback aplicado: overrides para @actions/http-client e undici."
+            elif [ -z "$REASONS" ]; then
+              REASONS="Nenhum fallback aplicado."
+            fi
+
+            npm audit --json > "$FINAL_JSON" 2>/dev/null || true
+            AFTER="$(audit_count "$FINAL_JSON")"
+            FIXED=$((BEFORE - AFTER))
+            [ "$FIXED" -lt 0 ] && FIXED=0
+            REMAINING_HIGH_CRITICAL="$(high_critical_count "$FINAL_JSON")"
+            UNRESOLVED_HIGH_CRITICAL=$((UNRESOLVED_HIGH_CRITICAL + REMAINING_HIGH_CRITICAL))
+
+            echo "## $LABEL" >> "$GITHUB_STEP_SUMMARY"
+            echo "- Corrigidas: **$FIXED**" >> "$GITHUB_STEP_SUMMARY"
+            echo "- Não corrigidas: **$AFTER**" >> "$GITHUB_STEP_SUMMARY"
+            if [ "$AFTER" -eq 0 ]; then
+              echo "- Motivo: _corrigido por npm audit fix e/ou fallback_" >> "$GITHUB_STEP_SUMMARY"
+            else
+              echo "- Motivo: _vulnerabilidades remanescentes após fallback_." >> "$GITHUB_STEP_SUMMARY"
+            fi
+            echo "- Ação de fallback aplicada: $REASONS" >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+
+            REMAINING_LINES="$(jq -r --arg label "$LABEL" '
+              .vulnerabilities
+              | to_entries[]
+              | "- **\($label):** \(.key) `\(.value.via[0].range // "?")` → disponível: `\(.value.fixAvailable.version // "não informado")` — _\(.value.via[0].title // \(.value.via[0] // "sem detalhes"))_ (\(.value.severity), remanescente após o fix)"
+            ' "$FINAL_JSON" 2>/dev/null || true)"
+
+            if [ -n "$REMAINING_LINES" ]; then
+              CHANGELOG_ENTRIES="${CHANGELOG_ENTRIES}${REMAINING_LINES}"$'\n'
+            fi
+            rm -f "$BEFORE_JSON" "$AFTER_FIX_JSON" "$AFTER_EXPLICIT_JSON" "$FINAL_JSON"
+            popd >/dev/null
+          done
+
+          if [ -n "$CHANGELOG_ENTRIES" ]; then
+            printf "\n## %s\n%b- Pipeline: %s\n" "$DATE" "$CHANGELOG_ENTRIES" "$PIPELINE" >> SECURITY_FIXES.md
+          fi
+
+          echo "had_vulns=$HAD_VULNS" >> "$GITHUB_OUTPUT"
+          echo "unresolved_high_critical=$UNRESOLVED_HIGH_CRITICAL" >> "$GITHUB_OUTPUT"
+          if [ "$UNRESOLVED_HIGH_CRITICAL" -gt 0 ]; then
+            echo "⚠️ Ainda restam $UNRESOLVED_HIGH_CRITICAL vulnerabilidades high/critical após fallback." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Surface unresolved high/critical vulnerabilities
+        if: steps.audit.outputs.unresolved_high_critical != '0'
+        shell: bash
+        run: |
+          echo "::warning title=Security unresolved::Ainda restam ${{ steps.audit.outputs.unresolved_high_critical }} vulnerabilidades high/critical após tentativa de correção automática."
 
       - name: Check for changes
         id: changes
@@ -234,11 +246,40 @@ jobs:
           if git diff --quiet; then
             echo "has_changes=false" >> "$GITHUB_OUTPUT"
           else
-            echo "has_changes=true" >> "$GITHUB_OUTPUT"
+            CURRENT_STATUS_FILE="$(mktemp)"
+            git status --porcelain --untracked-files=no | sort > "$CURRENT_STATUS_FILE"
+            HAS_AUDITED_LOCKFILE_CHANGE=false
+            HAS_AUDITED_MANIFEST_CHANGE=false
+            HAS_CHANGELOG_CHANGE=false
+            ONLY_ALLOWED_FILES=true
+            while IFS= read -r FILE; do
+              [ -z "$FILE" ] && continue
+              case "$FILE" in
+                ".github/actions/email-notification-action/package-lock.json"|".github/actions/npm-security-audit/package-lock.json"|".github/actions/preview-docs-action/package-lock.json"|".github/actions/validate-repo/package-lock.json")
+                  HAS_AUDITED_LOCKFILE_CHANGE=true
+                  ;;
+                "SECURITY_FIXES.md")
+                  HAS_CHANGELOG_CHANGE=true
+                  ;;
+                ".github/actions/email-notification-action/package.json"|".github/actions/npm-security-audit/package.json"|".github/actions/preview-docs-action/package.json"|".github/actions/validate-repo/package.json")
+                  HAS_AUDITED_MANIFEST_CHANGE=true
+                  ;;
+                *)
+                  ONLY_ALLOWED_FILES=false
+                  ;;
+              esac
+            done < <(comm -13 .git/status-baseline.txt "$CURRENT_STATUS_FILE" | awk '{print $2}')
+            rm -f "$CURRENT_STATUS_FILE"
+
+            if [ "$ONLY_ALLOWED_FILES" = true ] && { [ "$HAS_AUDITED_LOCKFILE_CHANGE" = true ] || [ "$HAS_AUDITED_MANIFEST_CHANGE" = true ]; }; then
+              echo "has_changes=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "has_changes=false" >> "$GITHUB_OUTPUT"
+            fi
           fi
 
       - name: Create Pull Request
-        if: (steps.email.outputs.had_vulns == 'true' || steps.security.outputs.had_vulns == 'true' || steps.preview.outputs.had_vulns == 'true' || steps.validate.outputs.had_vulns == 'true') && steps.changes.outputs.has_changes == 'true'
+        if: steps.audit.outputs.had_vulns == 'true' && steps.changes.outputs.has_changes == 'true'
         id: pr
         uses: peter-evans/create-pull-request@v8
         with:
@@ -250,7 +291,7 @@ jobs:
             This PR contains security fixes detected by `npm audit` in the shared GitHub Actions.
 
             See the workflow summary for the complete before/after report and updated packages.
-            The detailed history is recorded in `SECURITY_FIXES.md`.
+            Quando houver vulnerabilidades remanescentes, o histórico detalhado é registrado em `SECURITY_FIXES.md`.
           branch: security/npm-audit-fixes-test
           delete-branch: true
           labels: |
