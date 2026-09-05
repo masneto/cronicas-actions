@@ -263,7 +263,7 @@ jobs:
               esac
             done < <(git diff --name-only)
 
-            if [ "$ONLY_ALLOWED_FILES" = true ] && { [ "$HAS_AUDITED_LOCKFILE_CHANGE" = true ] || [ "$HAS_AUDITED_MANIFEST_CHANGE" = true ] || [ "$HAS_CHANGELOG_CHANGE" = true ]; }; then
+            if [ "$ONLY_ALLOWED_FILES" = true ] && { [ "$HAS_AUDITED_LOCKFILE_CHANGE" = true ] || [ "$HAS_AUDITED_MANIFEST_CHANGE" = true ]; }; then
               echo "has_changes=true" >> "$GITHUB_OUTPUT"
             else
               echo "has_changes=false" >> "$GITHUB_OUTPUT"
