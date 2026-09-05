@@ -216,13 +216,15 @@ jobs:
           if git diff --quiet; then
             echo "has_changes=false" >> "$GITHUB_OUTPUT"
           else
-            HAS_ALLOWED_LOCKFILE_CHANGE=false
+            HAS_AUDITED_LOCKFILE_CHANGE=false
             ONLY_ALLOWED_FILES=true
             while IFS= read -r FILE; do
               [ -z "$FILE" ] && continue
               case "$FILE" in
-                ".github/actions/email-notification-action/package-lock.json"|".github/actions/npm-security-audit/package-lock.json"|".github/actions/preview-docs-action/package-lock.json"|".github/actions/validate-repo/package-lock.json"|"SECURITY_FIXES.md")
-                  HAS_ALLOWED_LOCKFILE_CHANGE=true
+                ".github/actions/email-notification-action/package-lock.json"|".github/actions/npm-security-audit/package-lock.json"|".github/actions/preview-docs-action/package-lock.json"|".github/actions/validate-repo/package-lock.json")
+                  HAS_AUDITED_LOCKFILE_CHANGE=true
+                  ;;
+                "SECURITY_FIXES.md")
                   ;;
                 *)
                   ONLY_ALLOWED_FILES=false
@@ -230,7 +232,7 @@ jobs:
               esac
             done < <(git diff --name-only)
 
-            if [ "$HAS_ALLOWED_LOCKFILE_CHANGE" = true ] && [ "$ONLY_ALLOWED_FILES" = true ]; then
+            if [ "$HAS_AUDITED_LOCKFILE_CHANGE" = true ] && [ "$ONLY_ALLOWED_FILES" = true ]; then
               echo "has_changes=true" >> "$GITHUB_OUTPUT"
             else
               echo "has_changes=false" >> "$GITHUB_OUTPUT"
