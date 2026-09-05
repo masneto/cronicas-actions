@@ -58,6 +58,26 @@ jobs:
             jq '(.metadata.vulnerabilities.high // 0) + (.metadata.vulnerabilities.critical // 0)' "$FILE" 2>/dev/null || echo 0
           }
 
+          apply_override_fallback() {
+            local BACKUP_FILE
+            BACKUP_FILE="$(mktemp)"
+            cp package.json "$BACKUP_FILE"
+
+            set +e
+            node -e "const fs=require('fs');const p='package.json';const j=JSON.parse(fs.readFileSync(p,'utf8'));j.overrides=j.overrides||{};if (j.overrides['@actions/http-client'] !== '${OVERRIDE_HTTP_CLIENT_VERSION}') j.overrides['@actions/http-client']='${OVERRIDE_HTTP_CLIENT_VERSION}'; if (j.overrides.undici !== '${OVERRIDE_UNDICI_VERSION}') j.overrides.undici='${OVERRIDE_UNDICI_VERSION}';fs.writeFileSync(p, JSON.stringify(j,null,2)+'\n');"
+            local NODE_EXIT=$?
+            if [ "$NODE_EXIT" -eq 0 ]; then
+              npm install --package-lock-only --force --ignore-scripts --no-audit
+              local INSTALL_EXIT=$?
+              mv "$BACKUP_FILE" package.json
+              set -e
+              return "$INSTALL_EXIT"
+            fi
+            mv "$BACKUP_FILE" package.json
+            set -e
+            return "$NODE_EXIT"
+          }
+
           for SPEC in \
             "Email Notification Action|.github/actions/email-notification-action" \
             "NPM Security Audit Action|.github/actions/npm-security-audit" \
@@ -105,19 +125,11 @@ jobs:
 
             OVERRIDE_KEYS_TO_APPLY=$(node -e "const fs=require('fs');const j=JSON.parse(fs.readFileSync('package.json','utf8'));const o=j.overrides||{};const keys=[];if (o['@actions/http-client'] !== '${OVERRIDE_HTTP_CLIENT_VERSION}') keys.push('@actions/http-client'); if (o.undici !== '${OVERRIDE_UNDICI_VERSION}') keys.push('undici'); process.stdout.write(keys.join(','));")
             if [ -n "$OVERRIDE_KEYS_TO_APPLY" ]; then
-              PACKAGE_JSON_BACKUP="$(mktemp)"
-              cp package.json "$PACKAGE_JSON_BACKUP"
-              restore_package_json() {
-                if [ -f "$PACKAGE_JSON_BACKUP" ]; then
-                  mv "$PACKAGE_JSON_BACKUP" package.json
-                fi
-              }
-              trap restore_package_json EXIT
-              node -e "const fs=require('fs');const p='package.json';const j=JSON.parse(fs.readFileSync(p,'utf8'));j.overrides=j.overrides||{};if (j.overrides['@actions/http-client'] !== '${OVERRIDE_HTTP_CLIENT_VERSION}') j.overrides['@actions/http-client']='${OVERRIDE_HTTP_CLIENT_VERSION}'; if (j.overrides.undici !== '${OVERRIDE_UNDICI_VERSION}') j.overrides.undici='${OVERRIDE_UNDICI_VERSION}';fs.writeFileSync(p, JSON.stringify(j,null,2)+'\n');"
-              npm install --package-lock-only --force --ignore-scripts --no-audit
-              OVERRIDE_FALLBACK_APPLIED=true
-              restore_package_json
-              trap - EXIT
+              if apply_override_fallback; then
+                OVERRIDE_FALLBACK_APPLIED=true
+              else
+                exit $?
+              fi
             else
               REASONS="${REASONS} Fallback de overrides ignorado (valores já estavam nas versões-alvo)."
             fi
@@ -177,12 +189,20 @@ jobs:
           if git diff --quiet; then
             echo "has_changes=false" >> "$GITHUB_OUTPUT"
           else
-            LOCK_CHANGES=$(git diff --name-only -- \
-              .github/actions/email-notification-action/package-lock.json \
-              .github/actions/npm-security-audit/package-lock.json \
-              .github/actions/preview-docs-action/package-lock.json \
-              .github/actions/validate-repo/package-lock.json)
-            if [ -n "$LOCK_CHANGES" ]; then
+            HAS_ALLOWED_LOCKFILE_CHANGE=false
+            ONLY_ALLOWED_FILES=true
+            while IFS= read -r FILE; do
+              case "$FILE" in
+                ".github/actions/email-notification-action/package-lock.json"|".github/actions/npm-security-audit/package-lock.json"|".github/actions/preview-docs-action/package-lock.json"|".github/actions/validate-repo/package-lock.json")
+                  HAS_ALLOWED_LOCKFILE_CHANGE=true
+                  ;;
+                *)
+                  ONLY_ALLOWED_FILES=false
+                  ;;
+              esac
+            done < <(git diff --name-only)
+
+            if [ "$HAS_ALLOWED_LOCKFILE_CHANGE" = true ] && [ "$ONLY_ALLOWED_FILES" = true ]; then
               echo "has_changes=true" >> "$GITHUB_OUTPUT"
             else
               echo "has_changes=false" >> "$GITHUB_OUTPUT"
