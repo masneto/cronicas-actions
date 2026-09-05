@@ -8,6 +8,7 @@ on:
       - main
     paths-ignore:
       - '.github/workflows/**'
+      - ".github/actions/**" #remover depois      
   workflow_dispatch:
 
 jobs:
