@@ -38,6 +38,7 @@ jobs:
         with:
           working-directory: .github/actions/email-notification-action
           package-label: Email Notification Action
+          changelog-path: SECURITY_FIXES.md
 
       - name: Audit npm security audit action
         id: security
@@ -45,6 +46,7 @@ jobs:
         with:
           working-directory: .github/actions/npm-security-audit
           package-label: NPM Security Audit Action
+          changelog-path: SECURITY_FIXES.md
 
       - name: Audit preview docs action
         id: preview
@@ -52,6 +54,7 @@ jobs:
         with:
           working-directory: .github/actions/preview-docs-action
           package-label: Preview Docs Action
+          changelog-path: SECURITY_FIXES.md
 
       - name: Audit validate repo action
         id: validate
@@ -59,6 +62,7 @@ jobs:
         with:
           working-directory: .github/actions/validate-repo
           package-label: Validate Repo Action
+          changelog-path: SECURITY_FIXES.md
 
       - name: Check for changes
         id: changes
@@ -77,7 +81,15 @@ jobs:
         with:
           commit-message: 'fix(security): npm audit fixes'
           title: 'Security: npm audit fixes (${{ github.run_id }})'
-          body: 'Automatic security updates for the shared GitHub Actions. See the workflow summary for details.'
+          body: |
+            ## Automatic Security Update
+
+            This PR contains npm security fixes for the shared GitHub Actions.
+
+            See the workflow summary for package names, severities, affected ranges,
+            available fixes, before/after counts, and updated versions.
+
+            The detailed history is also recorded in `SECURITY_FIXES.md`.
           branch: security/npm-audit-fixes
           delete-branch: true
           labels: |

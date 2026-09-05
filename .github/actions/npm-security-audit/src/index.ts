@@ -21,6 +21,20 @@ function vulnerabilityCount(audit: AuditResult): number {
   );
 }
 
+function vulnerabilityRows(audit: AuditResult): string[][] {
+  return Object.entries(audit.vulnerabilities || {}).map(([name, vulnerability]) => {
+    const detail = vulnerability.via?.[0];
+    const title = typeof detail === 'string' ? detail : detail?.title || 'sem detalhes';
+    const range = typeof detail === 'string' ? '?' : detail?.range || '?';
+    const fix = vulnerability.fixAvailable === false
+      ? 'nao disponivel'
+      : typeof vulnerability.fixAvailable === 'object'
+        ? vulnerability.fixAvailable.version || 'disponivel'
+        : 'disponivel';
+    return [name, vulnerability.severity || 'unknown', title, range, fix];
+  });
+}
+
 function packageChanges(beforeFile: string, afterFile: string): string[] {
   const before = JSON.parse(fs.readFileSync(beforeFile, 'utf8')).packages || {};
   const after = JSON.parse(fs.readFileSync(afterFile, 'utf8')).packages || {};
@@ -132,9 +146,40 @@ export async function run(): Promise<void> {
     if (changelogPath && beforeCount > 0) {
       updateChangelog(path.resolve(workspace, changelogPath), before, label);
     }
-    core.summary.addHeading(`${label} - Antes do fix`).addRaw(`Vulnerabilidades: **${beforeCount}**`);
-    core.summary.addHeading(`${label} - Depois do fix`).addRaw(`Vulnerabilidades: **${afterCount}**`);
-    core.summary.addHeading(`${label} - Packages atualizados`);
+    core.summary.addHeading(label, 2);
+    core.summary.addRaw(`**Antes do fix:** ${beforeCount} vulnerabilidade(s)`);
+    const beforeRows = vulnerabilityRows(before);
+    if (beforeRows.length) {
+      core.summary.addTable([
+        [
+          { data: 'Pacote', header: true },
+          { data: 'Severidade', header: true },
+          { data: 'Problema', header: true },
+          { data: 'Faixa', header: true },
+          { data: 'Correcao', header: true },
+        ],
+        ...beforeRows.map((row) => row.map((data) => ({ data }))),
+      ]);
+    } else {
+      core.summary.addRaw('_Nenhuma vulnerabilidade encontrada._');
+    }
+    core.summary.addRaw(`**Depois do fix:** ${afterCount} vulnerabilidade(s)`);
+    const afterRows = vulnerabilityRows(after);
+    if (afterRows.length) {
+      core.summary.addTable([
+        [
+          { data: 'Pacote', header: true },
+          { data: 'Severidade', header: true },
+          { data: 'Problema', header: true },
+          { data: 'Faixa', header: true },
+          { data: 'Correcao', header: true },
+        ],
+        ...afterRows.map((row) => row.map((data) => ({ data }))),
+      ]);
+    } else {
+      core.summary.addRaw('_Nenhuma vulnerabilidade restante._');
+    }
+    core.summary.addHeading('Packages atualizados', 3);
     if (changes.length) {
       core.summary.addList(changes.map((change) => change.replace(/^- /, '')));
     } else {
