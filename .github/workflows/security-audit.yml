@@ -1,0 +1,96 @@
+name: Security Audit - Actions
+
+on:
+  schedule:
+    - cron: '0 2 * * *'
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - '.github/workflows/**'
+  workflow_dispatch:
+
+jobs:
+  audit:
+    name: Audit & Fix Actions
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: |
+            .github/actions/email-notification-action/package-lock.json
+            .github/actions/npm-security-audit/package-lock.json
+            .github/actions/preview-docs-action/package-lock.json
+            .github/actions/validate-repo/package-lock.json
+
+      - name: Audit email notification action
+        id: email
+        uses: masneto/cronicas-actions/.github/actions/npm-security-audit@main
+        with:
+          working-directory: .github/actions/email-notification-action
+          package-label: Email Notification Action
+
+      - name: Audit npm security audit action
+        id: security
+        uses: masneto/cronicas-actions/.github/actions/npm-security-audit@main
+        with:
+          working-directory: .github/actions/npm-security-audit
+          package-label: NPM Security Audit Action
+
+      - name: Audit preview docs action
+        id: preview
+        uses: masneto/cronicas-actions/.github/actions/npm-security-audit@main
+        with:
+          working-directory: .github/actions/preview-docs-action
+          package-label: Preview Docs Action
+
+      - name: Audit validate repo action
+        id: validate
+        uses: masneto/cronicas-actions/.github/actions/npm-security-audit@main
+        with:
+          working-directory: .github/actions/validate-repo
+          package-label: Validate Repo Action
+
+      - name: Check for changes
+        id: changes
+        shell: bash
+        run: |
+          if git diff --quiet; then
+            echo "has_changes=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_changes=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Create Pull Request
+        if: (steps.email.outputs.had-vulnerabilities == 'true' || steps.security.outputs.had-vulnerabilities == 'true' || steps.preview.outputs.had-vulnerabilities == 'true' || steps.validate.outputs.had-vulnerabilities == 'true') && steps.changes.outputs.has_changes == 'true'
+        id: pr
+        uses: peter-evans/create-pull-request@v8
+        with:
+          commit-message: 'fix(security): npm audit fixes'
+          title: 'Security: npm audit fixes (${{ github.run_id }})'
+          body: 'Automatic security updates for the shared GitHub Actions. See the workflow summary for details.'
+          branch: security/npm-audit-fixes
+          delete-branch: true
+          labels: |
+            security
+            dependencies
+            automated
+          reviewers: masneto
+
+      - name: Merge Pull Request
+        if: steps.pr.outputs.pull-request-number != ''
+        run: |
+          curl -s -X PUT \
+            -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Accept: application/vnd.github.v3+json" \
+            "https://api.github.com/repos/${{ github.repository }}/pulls/${{ steps.pr.outputs.pull-request-number }}/merge" \
+            -d '{"commit_title":"fix(security): npm audit fixes","merge_method":"squash"}'

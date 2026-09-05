@@ -1,0 +1,39 @@
+name: 'NPM Security Audit'
+description: 'Audita dependencias npm, aplica correcoes e reporta vulnerabilidades e pacotes atualizados.'
+author: 'Cronicas Team'
+
+inputs:
+  working-directory:
+    description: 'Diretorio do pacote npm relativo a raiz do repositorio.'
+    required: false
+    default: '.'
+  package-label:
+    description: 'Nome exibido no resumo do workflow.'
+    required: false
+    default: 'Package'
+  force:
+    description: 'Permite que npm audit fix atualize dependencias major.'
+    required: false
+    default: 'true'
+  changelog-path:
+    description: 'Arquivo de changelog relativo a raiz do repositorio. Deixe vazio para nao atualizar.'
+    required: false
+    default: ''
+
+outputs:
+  had-vulnerabilities:
+    description: 'true quando havia vulnerabilidades moderate, high ou critical antes do fix.'
+  before:
+    description: 'Quantidade de vulnerabilidades antes do fix.'
+  after:
+    description: 'Quantidade de vulnerabilidades depois do fix.'
+  audit-before-file:
+    description: 'Caminho do JSON de auditoria capturado antes do fix.'
+
+runs:
+  using: 'node22'
+  main: 'dist/index.js'
+
+branding:
+  icon: 'shield'
+  color: 'orange'

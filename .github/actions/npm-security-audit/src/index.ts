@@ -1,0 +1,155 @@
+import * as core from '@actions/core';
+import { exec } from '@actions/exec';
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
+
+type AuditResult = {
+  metadata?: { vulnerabilities?: Record<string, number> };
+  vulnerabilities?: Record<string, {
+    severity?: string;
+    via?: Array<{ title?: string; range?: string } | string>;
+    fixAvailable?: { version?: string } | boolean;
+  }>;
+};
+
+function vulnerabilityCount(audit: AuditResult): number {
+  const vulnerabilities = audit.metadata?.vulnerabilities || {};
+  return ['moderate', 'high', 'critical'].reduce(
+    (total, severity) => total + (vulnerabilities[severity] || 0),
+    0
+  );
+}
+
+function packageChanges(beforeFile: string, afterFile: string): string[] {
+  const before = JSON.parse(fs.readFileSync(beforeFile, 'utf8')).packages || {};
+  const after = JSON.parse(fs.readFileSync(afterFile, 'utf8')).packages || {};
+
+  return Object.keys(after).sort().flatMap((packagePath) => {
+    if (!packagePath.startsWith('node_modules/')) return [];
+    const oldVersion = before[packagePath]?.version;
+    const newVersion = after[packagePath]?.version;
+    if (!oldVersion || !newVersion || oldVersion === newVersion) return [];
+    return [`- **${packagePath.slice('node_modules/'.length)}**: \`${oldVersion}\` -> \`${newVersion}\``];
+  });
+}
+
+function changelogEntries(audit: AuditResult, label: string): string[] {
+  return Object.entries(audit.vulnerabilities || {}).map(([name, vulnerability]) => {
+    const detail = vulnerability.via?.[0];
+    const range = typeof detail === 'string' ? '?' : detail?.range || '?';
+    const title = typeof detail === 'string' ? detail : detail?.title || 'sem detalhes';
+    const fix = typeof vulnerability.fixAvailable === 'object'
+      ? vulnerability.fixAvailable.version || 'fixed'
+      : 'fixed';
+    return `- **${label}:** ${name} \`${range}\` -> \`${fix}\` - _${title}_ (${vulnerability.severity || 'unknown'})`;
+  });
+}
+
+function updateChangelog(file: string, audit: AuditResult, label: string): void {
+  if (!fs.existsSync(file)) throw new Error(`Changelog nao encontrado: ${file}`);
+  const date = new Date().toISOString().slice(0, 10);
+  const pipeline = `${process.env.GITHUB_SERVER_URL || 'https://github.com'}/${process.env.GITHUB_REPOSITORY || ''}/actions/runs/${process.env.GITHUB_RUN_ID || ''}`;
+  const entries = changelogEntries(audit, label);
+  if (!entries.length) return;
+
+  let content = fs.readFileSync(file, 'utf8');
+  const heading = `## ${date}`;
+  const entryText = entries.join('\n');
+  const existingHeading = content.indexOf(`${heading}\n`);
+  if (existingHeading >= 0) {
+    const nextHeading = content.indexOf('\n## ', existingHeading + heading.length);
+    const sectionEnd = nextHeading >= 0 ? nextHeading : content.length;
+    const section = content.slice(existingHeading, sectionEnd);
+    if (!section.includes(`**${label}:**`)) {
+      const insertion = `\n${entryText}\n`;
+      content = content.slice(0, sectionEnd) + insertion + content.slice(sectionEnd);
+    }
+  } else {
+    const firstSection = content.indexOf('\n## ');
+    const block = `\n${heading}\n\n${entryText}\n- Pipeline: ${pipeline}\n`;
+    content = firstSection >= 0
+      ? content.slice(0, firstSection) + block + content.slice(firstSection)
+      : `${content.trimEnd()}${block}\n`;
+  }
+  fs.writeFileSync(file, content);
+}
+
+async function runCommand(command: string, args: string[], cwd: string, outputFile?: string): Promise<void> {
+  let output = '';
+  await exec(command, args, {
+    cwd,
+    ignoreReturnCode: true,
+    listeners: {
+      stdout: (data: Buffer) => { output += data.toString(); }
+    }
+  });
+  if (outputFile) fs.writeFileSync(outputFile, output || '{}');
+}
+
+export async function run(): Promise<void> {
+  try {
+    const workspace = process.env.GITHUB_WORKSPACE || process.cwd();
+    const workingDirectory = core.getInput('working-directory') || '.';
+    const label = core.getInput('package-label') || workingDirectory;
+    const cwd = path.resolve(workspace, workingDirectory);
+    const safeLabel = label.replace(/[^a-zA-Z0-9._-]+/g, '-');
+    const beforeLock = path.join(os.tmpdir(), `${safeLabel}-package-lock-before.json`);
+    const beforeAudit = path.join(os.tmpdir(), `${safeLabel}-audit-before.json`);
+    const afterAudit = path.join(os.tmpdir(), `${safeLabel}-audit-after.json`);
+    const afterLock = path.join(cwd, 'package-lock.json');
+    const lockfilePath = workingDirectory === '.' ? 'package-lock.json' : `${workingDirectory}/package-lock.json`;
+    const changelogPath = core.getInput('changelog-path');
+
+    fs.writeFileSync(beforeLock, '');
+    await exec('npm', ['ci'], { cwd });
+    await exec('git', ['show', `HEAD:${lockfilePath}`], {
+      cwd: workspace,
+      listeners: { stdout: (data: Buffer) => fs.appendFileSync(beforeLock, data) }
+    });
+    await runCommand('npm', ['audit', '--json'], cwd, beforeAudit);
+
+    const before = JSON.parse(fs.readFileSync(beforeAudit, 'utf8')) as AuditResult;
+    const beforeCount = vulnerabilityCount(before);
+    core.startGroup(`${label} - Antes do fix`);
+    core.info(`Vulnerabilidades: ${beforeCount}`);
+    for (const [name, vulnerability] of Object.entries(before.vulnerabilities || {})) {
+      const detail = vulnerability.via?.[0];
+      const title = typeof detail === 'string' ? detail : detail?.title || 'sem detalhes';
+      core.info(`${name} (${vulnerability.severity || 'unknown'}): ${title}`);
+    }
+    core.endGroup();
+
+    const force = core.getInput('force') !== 'false';
+    await exec('npm', force ? ['audit', 'fix', '--force'] : ['audit', 'fix'], { cwd, ignoreReturnCode: true });
+    await runCommand('npm', ['audit', '--json'], cwd, afterAudit);
+
+    const after = JSON.parse(fs.readFileSync(afterAudit, 'utf8')) as AuditResult;
+    const afterCount = vulnerabilityCount(after);
+    const changes = packageChanges(beforeLock, afterLock);
+    core.startGroup(`${label} - Depois do fix`);
+    core.info(`Vulnerabilidades antes: ${beforeCount}`);
+    core.info(`Vulnerabilidades depois: ${afterCount}`);
+    core.info(`Corrigidas automaticamente: ${beforeCount - afterCount}`);
+    core.endGroup();
+    core.startGroup(`${label} - Packages atualizados`);
+    core.info(changes.length ? changes.join('\n') : 'Nenhuma mudanca');
+    core.endGroup();
+
+    core.setOutput('had-vulnerabilities', beforeCount > 0 ? 'true' : 'false');
+    core.setOutput('before', beforeCount);
+    core.setOutput('after', afterCount);
+    core.setOutput('audit-before-file', beforeAudit);
+    if (changelogPath && beforeCount > 0) {
+      updateChangelog(path.resolve(workspace, changelogPath), before, label);
+    }
+    core.summary.addHeading(`${label} - Antes do fix`).addRaw(`Vulnerabilidades: **${beforeCount}**`);
+    core.summary.addHeading(`${label} - Depois do fix`).addRaw(`Vulnerabilidades: **${afterCount}**`);
+    core.summary.addHeading(`${label} - Packages atualizados`).addRaw(changes.length ? changes.join('\n') : '_Nenhuma mudanca_');
+    await core.summary.write();
+  } catch (error) {
+    core.setFailed(error instanceof Error ? error.message : 'Action falhou com erro desconhecido.');
+  }
+}
+
+if (require.main === module) run();

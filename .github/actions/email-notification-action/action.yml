@@ -55,7 +55,7 @@ outputs:
     description: 'ID of the sent email message'
 
 runs:
-  using: 'node20'
+  using: 'node22'
   main: 'dist/index.js'
 
 branding:

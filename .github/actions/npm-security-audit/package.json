@@ -1,0 +1,30 @@
+{
+  "name": "npm-security-audit-action",
+  "version": "1.0.0",
+  "description": "Action para auditar e corrigir dependencias npm.",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "ncc build src/index.ts -o dist",
+    "test": "jest",
+    "lint": "eslint ."
+  },
+  "dependencies": {
+    "@actions/core": "^3.0.1",
+    "@actions/exec": "^1.1.1"
+  },
+  "devDependencies": {
+    "@types/jest": "^30.0.0",
+    "@types/node": "^18.19.3",
+    "@vercel/ncc": "^0.38.3",
+    "eslint": "^9.22.0",
+    "jest": "^30.0.0",
+    "ts-jest": "^29.4.11",
+    "typescript": "^5.8.2",
+    "typescript-eslint": "^8.60.1"
+  },
+  "jest": {
+    "preset": "ts-jest",
+    "testEnvironment": "node",
+    "moduleFileExtensions": ["ts", "js"]
+  }
+}
