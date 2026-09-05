@@ -9,7 +9,7 @@ type AuditResult = {
   vulnerabilities?: Record<string, {
     severity?: string;
     via?: Array<{ title?: string; range?: string; url?: string } | string>;
-    fixAvailable?: { name?: string; version?: string } | boolean;
+    fixAvailable?: { name?: string; version?: string; isSemVerMajor?: boolean } | boolean;
   }>;
 };
 
@@ -32,6 +32,16 @@ function fixVersion(vulnerability: Vulnerability): string {
     return vulnerability.fixAvailable.version || 'disponivel';
   }
   return vulnerability.fixAvailable ? 'disponivel' : 'nao informado';
+}
+
+function availableFixes(audit: AuditResult, allowMajor: boolean): string[] {
+  return [...new Set(Object.values(audit.vulnerabilities || {})
+    .map((vulnerability) => vulnerability.fixAvailable)
+    .filter((fix): fix is { name: string; version: string } => (
+      typeof fix === 'object' && typeof fix.name === 'string' && typeof fix.version === 'string' &&
+      (allowMajor || fix.isSemVerMajor !== true)
+    ))
+    .map((fix) => `${fix.name}@${fix.version}`))];
 }
 
 function vulnerabilityCount(audit: AuditResult): number {
@@ -154,14 +164,26 @@ export async function run(): Promise<void> {
     await runCommand('npm', force ? ['audit', 'fix', '--force'] : ['audit', 'fix'], cwd);
     await runCommand('npm', ['audit', '--json'], cwd, afterAudit);
 
-    const after = JSON.parse(fs.readFileSync(afterAudit, 'utf8')) as AuditResult;
+    let after = JSON.parse(fs.readFileSync(afterAudit, 'utf8')) as AuditResult;
     const afterCount = vulnerabilityCount(after);
+    const fixes = availableFixes(after, force);
+    if (afterCount > 0 && fixes.length) {
+      core.info(`${label}: aplicando ${fixes.length} correcao(oes) recomendada(s) pelo npm audit.`);
+      for (const fix of fixes) {
+        await runCommand('npm', [
+          'install', fix, '--save-exact', '--ignore-scripts', '--no-audit', '--no-fund'
+        ], cwd);
+      }
+      await runCommand('npm', ['audit', '--json'], cwd, afterAudit);
+      after = JSON.parse(fs.readFileSync(afterAudit, 'utf8')) as AuditResult;
+    }
     const changes = packageChanges(beforeLock, afterLock);
-    core.info(`${label}: ${afterCount} vulnerabilidade(s) depois do fix; ${changes.length} pacote(s) atualizado(s).`);
+    const finalCount = vulnerabilityCount(after);
+    core.info(`${label}: ${finalCount} vulnerabilidade(s) depois do fix; ${changes.length} pacote(s) atualizado(s).`);
 
     core.setOutput('had-vulnerabilities', beforeCount > 0 ? 'true' : 'false');
     core.setOutput('before', beforeCount);
-    core.setOutput('after', afterCount);
+    core.setOutput('after', finalCount);
     core.setOutput('audit-before-file', beforeAudit);
     if (changelogPath && beforeCount > 0) {
       updateChangelog(path.resolve(workspace, changelogPath), before, label);
