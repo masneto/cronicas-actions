@@ -120,7 +120,7 @@ export async function packageStep() {
           indexContent = "<div class=\"grid\"></div>";
           console.log("[DEBUG] Nenhum template encontrado, usando grid vazio");
         }
-      } catch (e) {
+      } catch {
         indexContent = "<div class=\"grid\"></div>";
         console.log("[DEBUG] Erro ao buscar template, usando grid vazio");
       }
@@ -167,8 +167,8 @@ export async function packageStep() {
     await exec("git", ["commit", "-m", `Update preview for PR #${prNumber}`], { ignoreReturnCode: true });
     await exec("git", ["push", "origin", "gh-pages"]);
     core.endGroup();
-  } catch (err: any) {
-    core.setFailed(err.message);
+  } catch (err: unknown) {
+    core.setFailed(err instanceof Error ? err.message : String(err));
   }
 }
 
@@ -218,8 +218,8 @@ export async function commentStep() {
     console.log("[DEBUG] Comentário de preview postado no PR");
     core.endGroup();
     core.setOutput("preview-url", previewUrl);
-  } catch (err: any) {
-    core.setFailed(err.message);
+  } catch (err: unknown) {
+    core.setFailed(err instanceof Error ? err.message : String(err));
   }
 }
 
