@@ -16,16 +16,17 @@
   "author": "Crônicas Team",
   "license": "MIT",
   "dependencies": {
-    "@actions/core": "^1.11.1",
+    "@actions/core": "^3.0.1",
     "nodemailer": "^10.0.0"
   },
   "devDependencies": {
+    "@types/node": "^26.4.1",
     "@types/nodemailer": "^7.0.12",
     "@typescript-eslint/eslint-plugin": "^8.60.1",
     "@typescript-eslint/parser": "^8.60.1",
-    "@vercel/ncc": "^0.38.0",
-    "eslint": "^9.23.0",
-    "typescript": "^5.8.2",
-    "typescript-eslint": "^8.60.1"
+    "@vercel/ncc": "^0.45.0",
+    "eslint": "^10.10.0",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.69.0"
   }
 }
