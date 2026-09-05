@@ -103,8 +103,8 @@ jobs:
               REASONS="Fallback aplicado: atualização explícita via fixAvailable."
             fi
 
-            EXISTING_OVERRIDE_KEYS=$(node -e "const fs=require('fs');const j=JSON.parse(fs.readFileSync('package.json','utf8'));const o=j.overrides||{};const keys=[];if (Object.prototype.hasOwnProperty.call(o,'@actions/http-client')) keys.push('@actions/http-client'); if (Object.prototype.hasOwnProperty.call(o,'undici')) keys.push('undici'); process.stdout.write(keys.join(','));")
-            if [ -z "$EXISTING_OVERRIDE_KEYS" ]; then
+            MISSING_OVERRIDE_KEYS=$(node -e "const fs=require('fs');const j=JSON.parse(fs.readFileSync('package.json','utf8'));const o=j.overrides||{};const keys=[];if (!Object.prototype.hasOwnProperty.call(o,'@actions/http-client')) keys.push('@actions/http-client'); if (!Object.prototype.hasOwnProperty.call(o,'undici')) keys.push('undici'); process.stdout.write(keys.join(','));")
+            if [ -n "$MISSING_OVERRIDE_KEYS" ]; then
               cp package.json package.json.bak
               restore_package_json() {
                 if [ -f package.json.bak ]; then
@@ -112,13 +112,13 @@ jobs:
                 fi
               }
               trap restore_package_json EXIT
-              node -e "const fs=require('fs');const p='package.json';const j=JSON.parse(fs.readFileSync(p,'utf8'));j.overrides={...(j.overrides||{}), '@actions/http-client':'${OVERRIDE_HTTP_CLIENT_VERSION}', undici:'${OVERRIDE_UNDICI_VERSION}'};fs.writeFileSync(p, JSON.stringify(j,null,2)+'\n');"
+              node -e "const fs=require('fs');const p='package.json';const j=JSON.parse(fs.readFileSync(p,'utf8'));j.overrides=j.overrides||{};if (!Object.prototype.hasOwnProperty.call(j.overrides,'@actions/http-client')) j.overrides['@actions/http-client']='${OVERRIDE_HTTP_CLIENT_VERSION}'; if (!Object.prototype.hasOwnProperty.call(j.overrides,'undici')) j.overrides.undici='${OVERRIDE_UNDICI_VERSION}';fs.writeFileSync(p, JSON.stringify(j,null,2)+'\n');"
               npm install --package-lock-only --force --ignore-scripts --no-audit
               OVERRIDE_FALLBACK_APPLIED=true
               restore_package_json
               trap - EXIT
             else
-              REASONS="${REASONS} Fallback de overrides ignorado (chaves já existentes: ${EXISTING_OVERRIDE_KEYS})."
+              REASONS="${REASONS} Fallback de overrides ignorado (todas as chaves já existentes no package.json)."
             fi
 
             if [ "$OVERRIDE_FALLBACK_APPLIED" = true ] && [ -n "$REASONS" ]; then
