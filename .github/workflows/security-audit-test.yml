@@ -98,7 +98,6 @@ jobs:
             AFTER_FIX_JSON="$(mktemp)"
             AFTER_EXPLICIT_JSON="$(mktemp)"
             FINAL_JSON="$(mktemp)"
-            CLEANUP_JSON="$(mktemp)"
             REASONS=""
             EXPLICIT_FALLBACK_APPLIED=false
             OVERRIDE_FALLBACK_APPLIED=false
@@ -137,11 +136,10 @@ jobs:
 
             OVERRIDE_KEYS_TO_APPLY=$(node -e "const fs=require('fs');const j=JSON.parse(fs.readFileSync('package.json','utf8'));const o=j.overrides||{};const keys=[];if (o['@actions/http-client'] !== '${OVERRIDE_HTTP_CLIENT_VERSION}') keys.push('@actions/http-client'); if (o.undici !== '${OVERRIDE_UNDICI_VERSION}') keys.push('undici'); process.stdout.write(keys.join(','));")
             if [ "$AFTER_EXPLICIT" -gt 0 ] && [ -n "$OVERRIDE_KEYS_TO_APPLY" ]; then
-              if apply_override_fallback; then
-                OVERRIDE_FALLBACK_APPLIED=true
-              else
-                exit $?
+              if ! apply_override_fallback; then
+                exit 1
               fi
+              OVERRIDE_FALLBACK_APPLIED=true
             elif [ "$AFTER_EXPLICIT" -gt 0 ]; then
               REASONS="${REASONS} Fallback de overrides ignorado (valores já estavam nas versões-alvo)."
             else
@@ -161,37 +159,6 @@ jobs:
             FIXED=$((BEFORE - AFTER))
             [ "$FIXED" -lt 0 ] && FIXED=0
             REMAINING_HIGH_CRITICAL="$(high_critical_count "$FINAL_JSON")"
-
-            HAS_TARGET_OVERRIDES=$(node -e "const fs=require('fs');const j=JSON.parse(fs.readFileSync('package.json','utf8'));const o=j.overrides||{};const has=Object.prototype.hasOwnProperty.call(o,'@actions/http-client') || Object.prototype.hasOwnProperty.call(o,'undici');process.stdout.write(has?'true':'false');")
-            if [ "$HAS_TARGET_OVERRIDES" = "true" ] && [ "$REMAINING_HIGH_CRITICAL" -eq 0 ]; then
-              CLEANUP_BACKUP="$(mktemp)"
-              cp package.json "$CLEANUP_BACKUP"
-
-              node -e "const fs=require('fs');const p='package.json';const j=JSON.parse(fs.readFileSync(p,'utf8'));if (j.overrides){delete j.overrides['@actions/http-client'];delete j.overrides.undici;if (Object.keys(j.overrides).length===0) delete j.overrides;}fs.writeFileSync(p, JSON.stringify(j,null,2)+'\n');"
-              npm install --package-lock-only --force --ignore-scripts --no-audit
-              npm audit --json > "$CLEANUP_JSON" 2>/dev/null || true
-
-              CLEANUP_HIGH_CRITICAL="$(high_critical_count "$CLEANUP_JSON")"
-              if [ "$CLEANUP_HIGH_CRITICAL" -eq 0 ]; then
-                FINAL_JSON="$CLEANUP_JSON"
-                AFTER="$(audit_count "$FINAL_JSON")"
-                FIXED=$((BEFORE - AFTER))
-                [ "$FIXED" -lt 0 ] && FIXED=0
-                REMAINING_HIGH_CRITICAL="$CLEANUP_HIGH_CRITICAL"
-                REASONS="${REASONS} Cleanup: overrides removidos (não mais necessários)."
-                rm -f "$CLEANUP_BACKUP"
-              else
-                mv "$CLEANUP_BACKUP" package.json
-                npm install --package-lock-only --force --ignore-scripts --no-audit
-                npm audit --json > "$FINAL_JSON" 2>/dev/null || true
-                AFTER="$(audit_count "$FINAL_JSON")"
-                FIXED=$((BEFORE - AFTER))
-                [ "$FIXED" -lt 0 ] && FIXED=0
-                REMAINING_HIGH_CRITICAL="$(high_critical_count "$FINAL_JSON")"
-                REASONS="${REASONS} Cleanup: overrides mantidos (remoção reintroduziu high/critical)."
-              fi
-            fi
-
             UNRESOLVED_HIGH_CRITICAL=$((UNRESOLVED_HIGH_CRITICAL + REMAINING_HIGH_CRITICAL))
 
             echo "## $LABEL" >> "$GITHUB_STEP_SUMMARY"
@@ -238,7 +205,7 @@ jobs:
             while IFS= read -r FILE; do
               [ -z "$FILE" ] && continue
               case "$FILE" in
-                ".github/actions/email-notification-action/package-lock.json"|".github/actions/npm-security-audit/package-lock.json"|".github/actions/preview-docs-action/package-lock.json"|".github/actions/validate-repo/package-lock.json"|".github/actions/email-notification-action/package.json"|".github/actions/npm-security-audit/package.json"|".github/actions/preview-docs-action/package.json"|".github/actions/validate-repo/package.json")
+                ".github/actions/email-notification-action/package-lock.json"|".github/actions/npm-security-audit/package-lock.json"|".github/actions/preview-docs-action/package-lock.json"|".github/actions/validate-repo/package-lock.json")
                   HAS_ALLOWED_LOCKFILE_CHANGE=true
                   ;;
                 *)
