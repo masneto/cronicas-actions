@@ -25751,6 +25751,7 @@ async function runCommand(command, args, cwd, outputFile) {
     await (0, exec_1.exec)(command, args, {
         cwd,
         ignoreReturnCode: true,
+        silent: true,
         listeners: {
             stdout: (data) => { output += data.toString(); }
         }
@@ -25775,6 +25776,7 @@ async function run() {
         await runCommand('npm', ['ci', '--no-audit', '--loglevel', 'error'], cwd);
         await (0, exec_1.exec)('git', ['show', `HEAD:${lockfilePath}`], {
             cwd: workspace,
+            silent: true,
             listeners: { stdout: (data) => fs.appendFileSync(beforeLock, data) }
         });
         await runCommand('npm', ['audit', '--json'], cwd, beforeAudit);

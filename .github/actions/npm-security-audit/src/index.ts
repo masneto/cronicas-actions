@@ -81,6 +81,7 @@ async function runCommand(command: string, args: string[], cwd: string, outputFi
   await exec(command, args, {
     cwd,
     ignoreReturnCode: true,
+    silent: true,
     listeners: {
       stdout: (data: Buffer) => { output += data.toString(); }
     }
@@ -106,6 +107,7 @@ export async function run(): Promise<void> {
     await runCommand('npm', ['ci', '--no-audit', '--loglevel', 'error'], cwd);
     await exec('git', ['show', `HEAD:${lockfilePath}`], {
       cwd: workspace,
+      silent: true,
       listeners: { stdout: (data: Buffer) => fs.appendFileSync(beforeLock, data) }
     });
     await runCommand('npm', ['audit', '--json'], cwd, beforeAudit);
