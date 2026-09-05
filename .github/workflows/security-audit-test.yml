@@ -59,20 +59,31 @@ jobs:
           }
 
           apply_override_fallback() {
-            (
-              set -e
-              local BACKUP_FILE
-              BACKUP_FILE="$(mktemp)"
-              cp package.json "$BACKUP_FILE"
-              cleanup_package_json() {
-                if [ -f "$BACKUP_FILE" ]; then
-                  mv "$BACKUP_FILE" package.json
-                fi
-              }
-              trap cleanup_package_json EXIT INT TERM
-              node -e "const fs=require('fs');const p='package.json';const j=JSON.parse(fs.readFileSync(p,'utf8'));j.overrides=j.overrides||{};if (j.overrides['@actions/http-client'] !== '${OVERRIDE_HTTP_CLIENT_VERSION}') j.overrides['@actions/http-client']='${OVERRIDE_HTTP_CLIENT_VERSION}'; if (j.overrides.undici !== '${OVERRIDE_UNDICI_VERSION}') j.overrides.undici='${OVERRIDE_UNDICI_VERSION}';fs.writeFileSync(p, JSON.stringify(j,null,2)+'\n');"
+            local BACKUP_FILE
+            BACKUP_FILE="$(mktemp)"
+            cp package.json "$BACKUP_FILE"
+            restore_package_json() {
+              if [ -f "$BACKUP_FILE" ]; then
+                mv "$BACKUP_FILE" package.json
+              fi
+            }
+            trap restore_package_json EXIT INT TERM
+
+            set +e
+            node -e "const fs=require('fs');const p='package.json';const j=JSON.parse(fs.readFileSync(p,'utf8'));j.overrides=j.overrides||{};if (j.overrides['@actions/http-client'] !== '${OVERRIDE_HTTP_CLIENT_VERSION}') j.overrides['@actions/http-client']='${OVERRIDE_HTTP_CLIENT_VERSION}'; if (j.overrides.undici !== '${OVERRIDE_UNDICI_VERSION}') j.overrides.undici='${OVERRIDE_UNDICI_VERSION}';fs.writeFileSync(p, JSON.stringify(j,null,2)+'\n');"
+            local NODE_EXIT=$?
+            local INSTALL_EXIT=0
+            if [ "$NODE_EXIT" -eq 0 ]; then
               npm install --package-lock-only --force --ignore-scripts --no-audit
-            )
+              INSTALL_EXIT=$?
+            else
+              INSTALL_EXIT=$NODE_EXIT
+            fi
+            set -e
+
+            restore_package_json
+            trap - EXIT INT TERM
+            return "$INSTALL_EXIT"
           }
 
           for SPEC in \
@@ -194,6 +205,7 @@ jobs:
             HAS_ALLOWED_LOCKFILE_CHANGE=false
             ONLY_ALLOWED_FILES=true
             while IFS= read -r FILE; do
+              [ -z "$FILE" ] && continue
               case "$FILE" in
                 ".github/actions/email-notification-action/package-lock.json"|".github/actions/npm-security-audit/package-lock.json"|".github/actions/preview-docs-action/package-lock.json"|".github/actions/validate-repo/package-lock.json")
                   HAS_ALLOWED_LOCKFILE_CHANGE=true
@@ -202,7 +214,7 @@ jobs:
                   ONLY_ALLOWED_FILES=false
                   ;;
               esac
-            done < <(git diff --name-only)
+            done < <(git status --porcelain --untracked-files=no | awk '{print $2}')
 
             if [ "$HAS_ALLOWED_LOCKFILE_CHANGE" = true ] && [ "$ONLY_ALLOWED_FILES" = true ]; then
               echo "has_changes=true" >> "$GITHUB_OUTPUT"
