@@ -152,6 +152,7 @@ jobs:
                 REASONS="${REASONS} Fallback de overrides executado, mas sem alteração no lockfile."
               fi
             elif [ "$AFTER_EXPLICIT" -gt 0 ] && [ "$NEEDS_OVERRIDE_FALLBACK" = true ]; then
+              rm -f package-lock.json
               npm install --package-lock-only --force --ignore-scripts --no-audit
               RECHECK_OVERRIDE_JSON="$(mktemp)"
               npm audit --json > "$RECHECK_OVERRIDE_JSON" 2>/dev/null || true
@@ -212,9 +213,16 @@ jobs:
           fi
 
           echo "had_vulns=$HAD_VULNS" >> "$GITHUB_OUTPUT"
+          echo "unresolved_high_critical=$UNRESOLVED_HIGH_CRITICAL" >> "$GITHUB_OUTPUT"
           if [ "$UNRESOLVED_HIGH_CRITICAL" -gt 0 ]; then
             echo "⚠️ Ainda restam $UNRESOLVED_HIGH_CRITICAL vulnerabilidades high/critical após fallback." >> "$GITHUB_STEP_SUMMARY"
           fi
+
+      - name: Surface unresolved high/critical vulnerabilities
+        if: steps.audit.outputs.unresolved_high_critical != '0'
+        shell: bash
+        run: |
+          echo "::warning title=Security unresolved::Ainda restam ${{ steps.audit.outputs.unresolved_high_critical }} vulnerabilidades high/critical após tentativa de correção automática."
 
       - name: Check for changes
         id: changes
