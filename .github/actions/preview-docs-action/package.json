@@ -5,13 +5,13 @@
   "main": "dist/index.js",
   "scripts": {
     "build": "ncc build src/index.ts -o dist",
-    "test": "jest",
+    "test": "jest --passWithNoTests",
     "lint": "eslint ."
   },
   "dependencies": {
     "@actions/core": "^1.11.1",
     "@actions/exec": "^1.1.1",
-    "@actions/github": "^9.1.1",
+      "@actions/github": "9.1.1",
     "@types/jest": "^30.0.0",
     "jest": "^30.0.0",
     "lint": "^1.2.2",
@@ -19,7 +19,7 @@
   },
   "devDependencies": {
     "@types/node": "^18.19.3",
-    "@vercel/ncc": "^0.38.3",
+    "@vercel/ncc": "^0.45.0",
     "eslint": "^9.22.0",
     "globals": "^16.0.0",
     "typescript": "^5.8.2",

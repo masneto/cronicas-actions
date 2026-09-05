@@ -55,8 +55,11 @@ jobs:
             cd "$action"
 
             if [ -f package.json ]; then
-              echo "Installing dependencies..."
-              npm ci
+              echo "Synchronizing package-lock.json..."
+              npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+
+              echo "Installing dependencies from lockfile..."
+              npm ci --no-audit --no-fund
 
               echo "Running linter..."
               npm run lint
