@@ -105,14 +105,15 @@ jobs:
 
             OVERRIDE_KEYS_TO_APPLY=$(node -e "const fs=require('fs');const j=JSON.parse(fs.readFileSync('package.json','utf8'));const o=j.overrides||{};const keys=[];if (o['@actions/http-client'] !== '${OVERRIDE_HTTP_CLIENT_VERSION}') keys.push('@actions/http-client'); if (o.undici !== '${OVERRIDE_UNDICI_VERSION}') keys.push('undici'); process.stdout.write(keys.join(','));")
             if [ -n "$OVERRIDE_KEYS_TO_APPLY" ]; then
-              cp package.json package.json.bak
+              PACKAGE_JSON_BACKUP="$(mktemp)"
+              cp package.json "$PACKAGE_JSON_BACKUP"
               restore_package_json() {
-                if [ -f package.json.bak ]; then
-                  mv package.json.bak package.json
+                if [ -f "$PACKAGE_JSON_BACKUP" ]; then
+                  mv "$PACKAGE_JSON_BACKUP" package.json
                 fi
               }
               trap restore_package_json EXIT
-              node -e "const fs=require('fs');const p='package.json';const j=JSON.parse(fs.readFileSync(p,'utf8'));j.overrides=j.overrides||{};if (!Object.prototype.hasOwnProperty.call(j.overrides,'@actions/http-client')) j.overrides['@actions/http-client']='${OVERRIDE_HTTP_CLIENT_VERSION}'; if (!Object.prototype.hasOwnProperty.call(j.overrides,'undici')) j.overrides.undici='${OVERRIDE_UNDICI_VERSION}';fs.writeFileSync(p, JSON.stringify(j,null,2)+'\n');"
+              node -e "const fs=require('fs');const p='package.json';const j=JSON.parse(fs.readFileSync(p,'utf8'));j.overrides=j.overrides||{};if (j.overrides['@actions/http-client'] !== '${OVERRIDE_HTTP_CLIENT_VERSION}') j.overrides['@actions/http-client']='${OVERRIDE_HTTP_CLIENT_VERSION}'; if (j.overrides.undici !== '${OVERRIDE_UNDICI_VERSION}') j.overrides.undici='${OVERRIDE_UNDICI_VERSION}';fs.writeFileSync(p, JSON.stringify(j,null,2)+'\n');"
               npm install --package-lock-only --force --ignore-scripts --no-audit
               OVERRIDE_FALLBACK_APPLIED=true
               restore_package_json
