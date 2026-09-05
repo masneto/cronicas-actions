@@ -8,6 +8,13 @@ on:
       - "feature/*"
     paths:
       - ".github/actions/**"
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: "Buildar todas as actions e criar um PR para a main"
+        required: false
+        default: true
+        type: boolean
 
 jobs:
   validate-and-build-actions:
@@ -16,20 +23,24 @@ jobs:
     permissions: write-all
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
-          node-version: "20"
+          node-version: "24"
           cache: "npm"
 
       - name: Identify Changed Actions
         id: changed-actions
         run: |
-          CHANGED_DIRS=$(git diff --name-only ${{ github.event.before }} ${{ github.sha }} | grep '^\.github/actions/' | cut -d'/' -f1-3 | sort -u || true)
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ github.ref }}" = "refs/heads/main" ]; then
+            CHANGED_DIRS=$(find .github/actions -mindepth 1 -maxdepth 1 -type d | sort)
+          else
+            CHANGED_DIRS=$(git diff --name-only "${{ github.event.before }}" "${{ github.sha }}" | grep '^\.github/actions/' | cut -d'/' -f1-3 | sort -u || true)
+          fi
           echo "Found changed action directories:"
           echo "$CHANGED_DIRS"
           CHANGED_DIR=$(echo "$CHANGED_DIRS" | tr '\n' ' ')
@@ -63,14 +74,42 @@ jobs:
             echo "::endgroup::"
           done
 
-      - name: Commit and Push Dist Changes
-        if: env.actions != ''
-        continue-on-error: true
+      - name: Commit and Push Dist Changes (feature)
+        if: github.event_name == 'push' && env.actions != ''
         run: |
           echo "::group::Commit and Push Dist Changes"
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git add .
+          if git diff --cached --quiet; then
+            echo "No build changes to commit."
+            exit 0
+          fi
           git commit -m "Atualização de build da(s) action(s): ${{ env.actions }}"
           git push https://x-access-token:${{ secrets.PAT_GITHUB_TOKEN }}@github.com/${{ github.repository }} HEAD:${{ github.ref_name }} --force
           echo "::endgroup::"
+
+      - name: Create Pull Request with all action builds
+        if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.publish == true
+        id: create-pr
+        uses: peter-evans/create-pull-request@v8
+        with:
+          token: ${{ secrets.PAT_GITHUB_TOKEN }}
+          base: main
+          branch: automation/build-all-actions-${{ github.run_number }}
+          delete-branch: true
+          commit-message: "chore: rebuild all actions"
+          title: "chore: rebuild all GitHub Actions"
+          body: "Build automatizado de todas as actions em .github/actions."
+          labels: |
+            automation
+            dependencies
+
+      - name: Merge rebuild Pull Request
+        if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && steps.create-pr.outputs.pull-request-number != ''
+        run: |
+          curl --fail-with-body -sS -X PUT \
+            -H "Authorization: token ${{ secrets.PAT_GITHUB_TOKEN }}" \
+            -H "Accept: application/vnd.github.v3+json" \
+            "https://api.github.com/repos/${{ github.repository }}/pulls/${{ steps.create-pr.outputs.pull-request-number }}/merge" \
+            -d '{"commit_title":"chore: rebuild all GitHub Actions","merge_method":"squash"}'

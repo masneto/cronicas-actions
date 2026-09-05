@@ -47,13 +47,14 @@ function changelogEntries(audit: AuditResult, label: string): string[] {
 }
 
 function updateChangelog(file: string, audit: AuditResult, label: string): void {
-  if (!fs.existsSync(file)) throw new Error(`Changelog nao encontrado: ${file}`);
   const date = new Date().toISOString().slice(0, 10);
   const pipeline = `${process.env.GITHUB_SERVER_URL || 'https://github.com'}/${process.env.GITHUB_REPOSITORY || ''}/actions/runs/${process.env.GITHUB_RUN_ID || ''}`;
   const entries = changelogEntries(audit, label);
   if (!entries.length) return;
 
-  let content = fs.readFileSync(file, 'utf8');
+  let content = fs.existsSync(file)
+    ? fs.readFileSync(file, 'utf8')
+    : '# Security Fixes\n';
   const heading = `## ${date}`;
   const entryText = entries.join('\n');
   const existingHeading = content.indexOf(`${heading}\n`);
@@ -102,7 +103,7 @@ export async function run(): Promise<void> {
     const changelogPath = core.getInput('changelog-path');
 
     fs.writeFileSync(beforeLock, '');
-    await exec('npm', ['ci'], { cwd });
+    await runCommand('npm', ['ci', '--no-audit', '--loglevel', 'error'], cwd);
     await exec('git', ['show', `HEAD:${lockfilePath}`], {
       cwd: workspace,
       listeners: { stdout: (data: Buffer) => fs.appendFileSync(beforeLock, data) }
@@ -111,30 +112,16 @@ export async function run(): Promise<void> {
 
     const before = JSON.parse(fs.readFileSync(beforeAudit, 'utf8')) as AuditResult;
     const beforeCount = vulnerabilityCount(before);
-    core.startGroup(`${label} - Antes do fix`);
-    core.info(`Vulnerabilidades: ${beforeCount}`);
-    for (const [name, vulnerability] of Object.entries(before.vulnerabilities || {})) {
-      const detail = vulnerability.via?.[0];
-      const title = typeof detail === 'string' ? detail : detail?.title || 'sem detalhes';
-      core.info(`${name} (${vulnerability.severity || 'unknown'}): ${title}`);
-    }
-    core.endGroup();
+    core.info(`${label}: ${beforeCount} vulnerabilidade(s) antes do fix.`);
 
     const force = core.getInput('force') !== 'false';
-    await exec('npm', force ? ['audit', 'fix', '--force'] : ['audit', 'fix'], { cwd, ignoreReturnCode: true });
+    await runCommand('npm', force ? ['audit', 'fix', '--force'] : ['audit', 'fix'], cwd);
     await runCommand('npm', ['audit', '--json'], cwd, afterAudit);
 
     const after = JSON.parse(fs.readFileSync(afterAudit, 'utf8')) as AuditResult;
     const afterCount = vulnerabilityCount(after);
     const changes = packageChanges(beforeLock, afterLock);
-    core.startGroup(`${label} - Depois do fix`);
-    core.info(`Vulnerabilidades antes: ${beforeCount}`);
-    core.info(`Vulnerabilidades depois: ${afterCount}`);
-    core.info(`Corrigidas automaticamente: ${beforeCount - afterCount}`);
-    core.endGroup();
-    core.startGroup(`${label} - Packages atualizados`);
-    core.info(changes.length ? changes.join('\n') : 'Nenhuma mudanca');
-    core.endGroup();
+    core.info(`${label}: ${afterCount} vulnerabilidade(s) depois do fix; ${changes.length} pacote(s) atualizado(s).`);
 
     core.setOutput('had-vulnerabilities', beforeCount > 0 ? 'true' : 'false');
     core.setOutput('before', beforeCount);
@@ -145,7 +132,12 @@ export async function run(): Promise<void> {
     }
     core.summary.addHeading(`${label} - Antes do fix`).addRaw(`Vulnerabilidades: **${beforeCount}**`);
     core.summary.addHeading(`${label} - Depois do fix`).addRaw(`Vulnerabilidades: **${afterCount}**`);
-    core.summary.addHeading(`${label} - Packages atualizados`).addRaw(changes.length ? changes.join('\n') : '_Nenhuma mudanca_');
+    core.summary.addHeading(`${label} - Packages atualizados`);
+    if (changes.length) {
+      core.summary.addList(changes.map((change) => change.replace(/^- /, '')));
+    } else {
+      core.summary.addRaw('_Nenhuma mudanca_');
+    }
     await core.summary.write();
   } catch (error) {
     core.setFailed(error instanceof Error ? error.message : 'Action falhou com erro desconhecido.');

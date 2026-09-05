@@ -25717,14 +25717,14 @@ function changelogEntries(audit, label) {
     });
 }
 function updateChangelog(file, audit, label) {
-    if (!fs.existsSync(file))
-        throw new Error(`Changelog nao encontrado: ${file}`);
     const date = new Date().toISOString().slice(0, 10);
     const pipeline = `${process.env.GITHUB_SERVER_URL || 'https://github.com'}/${process.env.GITHUB_REPOSITORY || ''}/actions/runs/${process.env.GITHUB_RUN_ID || ''}`;
     const entries = changelogEntries(audit, label);
     if (!entries.length)
         return;
-    let content = fs.readFileSync(file, 'utf8');
+    let content = fs.existsSync(file)
+        ? fs.readFileSync(file, 'utf8')
+        : '# Security Fixes\n';
     const heading = `## ${date}`;
     const entryText = entries.join('\n');
     const existingHeading = content.indexOf(`${heading}\n`);
@@ -25772,7 +25772,7 @@ async function run() {
         const lockfilePath = workingDirectory === '.' ? 'package-lock.json' : `${workingDirectory}/package-lock.json`;
         const changelogPath = core.getInput('changelog-path');
         fs.writeFileSync(beforeLock, '');
-        await (0, exec_1.exec)('npm', ['ci'], { cwd });
+        await runCommand('npm', ['ci', '--no-audit', '--loglevel', 'error'], cwd);
         await (0, exec_1.exec)('git', ['show', `HEAD:${lockfilePath}`], {
             cwd: workspace,
             listeners: { stdout: (data) => fs.appendFileSync(beforeLock, data) }
@@ -25780,28 +25780,14 @@ async function run() {
         await runCommand('npm', ['audit', '--json'], cwd, beforeAudit);
         const before = JSON.parse(fs.readFileSync(beforeAudit, 'utf8'));
         const beforeCount = vulnerabilityCount(before);
-        core.startGroup(`${label} - Antes do fix`);
-        core.info(`Vulnerabilidades: ${beforeCount}`);
-        for (const [name, vulnerability] of Object.entries(before.vulnerabilities || {})) {
-            const detail = vulnerability.via?.[0];
-            const title = typeof detail === 'string' ? detail : detail?.title || 'sem detalhes';
-            core.info(`${name} (${vulnerability.severity || 'unknown'}): ${title}`);
-        }
-        core.endGroup();
+        core.info(`${label}: ${beforeCount} vulnerabilidade(s) antes do fix.`);
         const force = core.getInput('force') !== 'false';
-        await (0, exec_1.exec)('npm', force ? ['audit', 'fix', '--force'] : ['audit', 'fix'], { cwd, ignoreReturnCode: true });
+        await runCommand('npm', force ? ['audit', 'fix', '--force'] : ['audit', 'fix'], cwd);
         await runCommand('npm', ['audit', '--json'], cwd, afterAudit);
         const after = JSON.parse(fs.readFileSync(afterAudit, 'utf8'));
         const afterCount = vulnerabilityCount(after);
         const changes = packageChanges(beforeLock, afterLock);
-        core.startGroup(`${label} - Depois do fix`);
-        core.info(`Vulnerabilidades antes: ${beforeCount}`);
-        core.info(`Vulnerabilidades depois: ${afterCount}`);
-        core.info(`Corrigidas automaticamente: ${beforeCount - afterCount}`);
-        core.endGroup();
-        core.startGroup(`${label} - Packages atualizados`);
-        core.info(changes.length ? changes.join('\n') : 'Nenhuma mudanca');
-        core.endGroup();
+        core.info(`${label}: ${afterCount} vulnerabilidade(s) depois do fix; ${changes.length} pacote(s) atualizado(s).`);
         core.setOutput('had-vulnerabilities', beforeCount > 0 ? 'true' : 'false');
         core.setOutput('before', beforeCount);
         core.setOutput('after', afterCount);
@@ -25811,7 +25797,13 @@ async function run() {
         }
         core.summary.addHeading(`${label} - Antes do fix`).addRaw(`Vulnerabilidades: **${beforeCount}**`);
         core.summary.addHeading(`${label} - Depois do fix`).addRaw(`Vulnerabilidades: **${afterCount}**`);
-        core.summary.addHeading(`${label} - Packages atualizados`).addRaw(changes.length ? changes.join('\n') : '_Nenhuma mudanca_');
+        core.summary.addHeading(`${label} - Packages atualizados`);
+        if (changes.length) {
+            core.summary.addList(changes.map((change) => change.replace(/^- /, '')));
+        }
+        else {
+            core.summary.addRaw('_Nenhuma mudanca_');
+        }
         await core.summary.write();
     }
     catch (error) {

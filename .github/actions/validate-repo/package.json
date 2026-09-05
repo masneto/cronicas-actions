@@ -9,7 +9,7 @@
     "lint": "eslint ."
   },
   "dependencies": {
-    "@actions/core": "^3.0.1",
+    "@actions/core": "^1.11.1",
     "@actions/github": "^9.0.0",
     "@types/jest": "^30.0.0",
     "jest": "^30.0.0",

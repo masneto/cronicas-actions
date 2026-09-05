@@ -1,3 +1,4 @@
+# CI validation marker
 name: 'Validate Repository Structure'
 description: 'Verifica se os arquivos necessários existem no repositório.'
 author: 'Crônicas Team'

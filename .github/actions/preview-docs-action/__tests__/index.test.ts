@@ -35,7 +35,7 @@ describe('GitHub Action - Docs Preview Deploy', () => {
   beforeEach(() => {
     jest.resetAllMocks();
     (core.getInput as jest.Mock).mockImplementation((name: string) => {
-      const inputs: any = {
+      const inputs: Record<string, string> = {
         artifact_repo: 'masneto/cronicas-actions',
         pr_number: '123',
         artifact_run_id: '456',
@@ -51,7 +51,9 @@ describe('GitHub Action - Docs Preview Deploy', () => {
     (fs.copyFileSync as jest.Mock).mockImplementation(() => {});
     (exec as jest.Mock).mockResolvedValue(0);
     // Mock github.context.repo
-    (github as any).context = { repo: { owner: 'masneto', repo: 'cronicas-actions' } };
+    (github as unknown as { context: { repo: { owner: string; repo: string } } }).context = {
+      repo: { owner: 'masneto', repo: 'cronicas-actions' },
+    };
   });
 
   test('Executa fluxo completo de deploy de preview', async () => {
