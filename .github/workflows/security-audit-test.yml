@@ -59,23 +59,20 @@ jobs:
           }
 
           apply_override_fallback() {
-            local BACKUP_FILE
-            BACKUP_FILE="$(mktemp)"
-            cp package.json "$BACKUP_FILE"
-
-            set +e
-            node -e "const fs=require('fs');const p='package.json';const j=JSON.parse(fs.readFileSync(p,'utf8'));j.overrides=j.overrides||{};if (j.overrides['@actions/http-client'] !== '${OVERRIDE_HTTP_CLIENT_VERSION}') j.overrides['@actions/http-client']='${OVERRIDE_HTTP_CLIENT_VERSION}'; if (j.overrides.undici !== '${OVERRIDE_UNDICI_VERSION}') j.overrides.undici='${OVERRIDE_UNDICI_VERSION}';fs.writeFileSync(p, JSON.stringify(j,null,2)+'\n');"
-            local NODE_EXIT=$?
-            if [ "$NODE_EXIT" -eq 0 ]; then
-              npm install --package-lock-only --force --ignore-scripts --no-audit
-              local INSTALL_EXIT=$?
-              mv "$BACKUP_FILE" package.json
+            (
               set -e
-              return "$INSTALL_EXIT"
-            fi
-            mv "$BACKUP_FILE" package.json
-            set -e
-            return "$NODE_EXIT"
+              local BACKUP_FILE
+              BACKUP_FILE="$(mktemp)"
+              cp package.json "$BACKUP_FILE"
+              cleanup_package_json() {
+                if [ -f "$BACKUP_FILE" ]; then
+                  mv "$BACKUP_FILE" package.json
+                fi
+              }
+              trap cleanup_package_json EXIT INT TERM
+              node -e "const fs=require('fs');const p='package.json';const j=JSON.parse(fs.readFileSync(p,'utf8'));j.overrides=j.overrides||{};if (j.overrides['@actions/http-client'] !== '${OVERRIDE_HTTP_CLIENT_VERSION}') j.overrides['@actions/http-client']='${OVERRIDE_HTTP_CLIENT_VERSION}'; if (j.overrides.undici !== '${OVERRIDE_UNDICI_VERSION}') j.overrides.undici='${OVERRIDE_UNDICI_VERSION}';fs.writeFileSync(p, JSON.stringify(j,null,2)+'\n');"
+              npm install --package-lock-only --force --ignore-scripts --no-audit
+            )
           }
 
           for SPEC in \
@@ -88,6 +85,7 @@ jobs:
             DIR="${SPEC##*|}"
             BEFORE_JSON="$(mktemp)"
             AFTER_FIX_JSON="$(mktemp)"
+            AFTER_EXPLICIT_JSON="$(mktemp)"
             FINAL_JSON="$(mktemp)"
             REASONS=""
             EXPLICIT_FALLBACK_APPLIED=false
@@ -118,20 +116,24 @@ jobs:
                 EXPLICIT_FALLBACK_APPLIED=true
               fi
             done <<< "$FIXES"
+            npm audit --json > "$AFTER_EXPLICIT_JSON" 2>/dev/null || true
+            AFTER_EXPLICIT="$(audit_count "$AFTER_EXPLICIT_JSON")"
 
             if [ "$EXPLICIT_FALLBACK_APPLIED" = true ]; then
               REASONS="Fallback aplicado: atualização explícita via fixAvailable."
             fi
 
             OVERRIDE_KEYS_TO_APPLY=$(node -e "const fs=require('fs');const j=JSON.parse(fs.readFileSync('package.json','utf8'));const o=j.overrides||{};const keys=[];if (o['@actions/http-client'] !== '${OVERRIDE_HTTP_CLIENT_VERSION}') keys.push('@actions/http-client'); if (o.undici !== '${OVERRIDE_UNDICI_VERSION}') keys.push('undici'); process.stdout.write(keys.join(','));")
-            if [ -n "$OVERRIDE_KEYS_TO_APPLY" ]; then
+            if [ "$AFTER_EXPLICIT" -gt 0 ] && [ -n "$OVERRIDE_KEYS_TO_APPLY" ]; then
               if apply_override_fallback; then
                 OVERRIDE_FALLBACK_APPLIED=true
               else
                 exit $?
               fi
-            else
+            elif [ "$AFTER_EXPLICIT" -gt 0 ]; then
               REASONS="${REASONS} Fallback de overrides ignorado (valores já estavam nas versões-alvo)."
+            else
+              REASONS="${REASONS} Fallback de overrides não necessário (vulnerabilidades resolvidas antes desta etapa)."
             fi
 
             if [ "$OVERRIDE_FALLBACK_APPLIED" = true ] && [ -n "$REASONS" ]; then
