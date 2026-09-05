@@ -69,7 +69,7 @@ jobs:
 
           echo "" >> "$GITHUB_STEP_SUMMARY"
           echo "## Email Notification Action - Packages atualizados" >> "$GITHUB_STEP_SUMMARY"
-          PKGS=$(git diff -- .github/actions/email-notification-action/package-lock.json | grep -E '^\+\s+"version"' | awk -F'"' '{print "- " $4}' | sort -u)
+          PKGS=$(git diff -- .github/actions/email-notification-action/package-lock.json | grep -E '^\+\s+"version"' | awk -F'"' '{print "- " $4}' | sort -u || true)
           [ -n "$PKGS" ] && echo "$PKGS" >> "$GITHUB_STEP_SUMMARY" || echo "_Nenhuma mudança_" >> "$GITHUB_STEP_SUMMARY"
 
           if [ "$BEFORE" -gt 0 ] 2>/dev/null; then
@@ -99,7 +99,7 @@ jobs:
 
           echo "" >> "$GITHUB_STEP_SUMMARY"
           echo "## NPM Security Audit Action - Packages atualizados" >> "$GITHUB_STEP_SUMMARY"
-          PKGS=$(git diff -- .github/actions/npm-security-audit/package-lock.json | grep -E '^\+\s+"version"' | awk -F'"' '{print "- " $4}' | sort -u)
+          PKGS=$(git diff -- .github/actions/npm-security-audit/package-lock.json | grep -E '^\+\s+"version"' | awk -F'"' '{print "- " $4}' | sort -u || true)
           [ -n "$PKGS" ] && echo "$PKGS" >> "$GITHUB_STEP_SUMMARY" || echo "_Nenhuma mudança_" >> "$GITHUB_STEP_SUMMARY"
 
           if [ "$BEFORE" -gt 0 ] 2>/dev/null; then
@@ -129,7 +129,7 @@ jobs:
 
           echo "" >> "$GITHUB_STEP_SUMMARY"
           echo "## Preview Docs Action - Packages atualizados" >> "$GITHUB_STEP_SUMMARY"
-          PKGS=$(git diff -- .github/actions/preview-docs-action/package-lock.json | grep -E '^\+\s+"version"' | awk -F'"' '{print "- " $4}' | sort -u)
+          PKGS=$(git diff -- .github/actions/preview-docs-action/package-lock.json | grep -E '^\+\s+"version"' | awk -F'"' '{print "- " $4}' | sort -u || true)
           [ -n "$PKGS" ] && echo "$PKGS" >> "$GITHUB_STEP_SUMMARY" || echo "_Nenhuma mudança_" >> "$GITHUB_STEP_SUMMARY"
 
           if [ "$BEFORE" -gt 0 ] 2>/dev/null; then
@@ -159,7 +159,7 @@ jobs:
 
           echo "" >> "$GITHUB_STEP_SUMMARY"
           echo "## Validate Repo Action - Packages atualizados" >> "$GITHUB_STEP_SUMMARY"
-          PKGS=$(git diff -- .github/actions/validate-repo/package-lock.json | grep -E '^\+\s+"version"' | awk -F'"' '{print "- " $4}' | sort -u)
+          PKGS=$(git diff -- .github/actions/validate-repo/package-lock.json | grep -E '^\+\s+"version"' | awk -F'"' '{print "- " $4}' | sort -u || true)
           [ -n "$PKGS" ] && echo "$PKGS" >> "$GITHUB_STEP_SUMMARY" || echo "_Nenhuma mudança_" >> "$GITHUB_STEP_SUMMARY"
 
           if [ "$BEFORE" -gt 0 ] 2>/dev/null; then
