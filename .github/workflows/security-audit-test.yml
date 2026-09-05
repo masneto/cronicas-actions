@@ -260,12 +260,12 @@ jobs:
           reviewers: |
             masneto
 
-      - name: Merge Pull Request
-        if: steps.pr.outputs.pull-request-number != ''
-        shell: bash
-        run: |
-          curl -s -X PUT \
-            -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-            -H "Accept: application/vnd.github.v3+json" \
-            "https://api.github.com/repos/${{ github.repository }}/pulls/${{ steps.pr.outputs.pull-request-number }}/merge" \
-            -d "{\n              \"commit_title\": \"fix(security): npm audit fixes\",\n              \"merge_method\": \"squash\"\n            }"
+      # - name: Merge Pull Request
+      #   if: steps.pr.outputs.pull-request-number != ''
+      #   shell: bash
+      #   run: |
+      #     curl -s -X PUT \
+      #       -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+      #       -H "Accept: application/vnd.github.v3+json" \
+      #       "https://api.github.com/repos/${{ github.repository }}/pulls/${{ steps.pr.outputs.pull-request-number }}/merge" \
+      #       -d "{\n              \"commit_title\": \"fix(security): npm audit fixes\",\n              \"merge_method\": \"squash\"\n            }"
