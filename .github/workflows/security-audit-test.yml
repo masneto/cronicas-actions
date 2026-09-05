@@ -129,21 +129,27 @@ jobs:
             done <<< "$FIXES"
             npm audit --json > "$AFTER_EXPLICIT_JSON" 2>/dev/null || true
             AFTER_EXPLICIT="$(audit_count "$AFTER_EXPLICIT_JSON")"
+            NEEDS_OVERRIDE_FALLBACK=false
+            if jq -e '((.vulnerabilities // {}) | has("undici")) or ((.vulnerabilities // {}) | has("@actions/http-client"))' "$AFTER_EXPLICIT_JSON" >/dev/null 2>&1; then
+              NEEDS_OVERRIDE_FALLBACK=true
+            fi
 
             if [ "$EXPLICIT_FALLBACK_APPLIED" = true ]; then
               REASONS="Fallback aplicado: atualização explícita via fixAvailable."
             fi
 
             OVERRIDE_KEYS_TO_APPLY=$(node -e "const fs=require('fs');const j=JSON.parse(fs.readFileSync('package.json','utf8'));const o=j.overrides||{};const keys=[];if (o['@actions/http-client'] !== '${OVERRIDE_HTTP_CLIENT_VERSION}') keys.push('@actions/http-client'); if (o.undici !== '${OVERRIDE_UNDICI_VERSION}') keys.push('undici'); process.stdout.write(keys.join(','));")
-            if [ "$AFTER_EXPLICIT" -gt 0 ] && [ -n "$OVERRIDE_KEYS_TO_APPLY" ]; then
+            if [ "$AFTER_EXPLICIT" -gt 0 ] && [ "$NEEDS_OVERRIDE_FALLBACK" = true ] && [ -n "$OVERRIDE_KEYS_TO_APPLY" ]; then
               if ! apply_override_fallback; then
                 exit 1
               fi
               OVERRIDE_FALLBACK_APPLIED=true
-            elif [ "$AFTER_EXPLICIT" -gt 0 ]; then
+            elif [ "$AFTER_EXPLICIT" -gt 0 ] && [ "$NEEDS_OVERRIDE_FALLBACK" = true ]; then
               npm install --package-lock-only --force --ignore-scripts --no-audit
               OVERRIDE_FALLBACK_APPLIED=true
               REASONS="${REASONS} Fallback aplicado: lockfile regenerado com overrides já presentes."
+            elif [ "$AFTER_EXPLICIT" -gt 0 ]; then
+              REASONS="${REASONS} Fallback de overrides não aplicável para as vulnerabilidades remanescentes."
             else
               REASONS="${REASONS} Fallback de overrides não necessário (vulnerabilidades resolvidas antes desta etapa)."
             fi
