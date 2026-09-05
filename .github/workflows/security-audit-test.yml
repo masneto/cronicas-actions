@@ -44,6 +44,7 @@ jobs:
           UNRESOLVED_HIGH_CRITICAL=0
           DATE=$(date -u '+%Y-%m-%d')
           PIPELINE="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          CHANGELOG_ENTRIES=""
 
           audit_count() {
             local FILE="$1"
@@ -89,7 +90,7 @@ jobs:
 
             while IFS= read -r PACKAGE; do
               if [ -n "$PACKAGE" ]; then
-                npm install --package-lock-only --force --ignore-scripts --no-audit "$PACKAGE"
+                npm install --package-lock-only --force --ignore-scripts --no-audit --no-save "$PACKAGE"
               fi
             done <<< "$FIXES"
 
@@ -97,8 +98,16 @@ jobs:
               REASONS="Fallback: atualização explícita via fixAvailable."
             fi
 
+            cp package.json package.json.bak
             node -e "const fs=require('fs');const p='package.json';const j=JSON.parse(fs.readFileSync(p,'utf8'));j.overrides={...(j.overrides||{}), '@actions/http-client':'^3.0.2', undici:'^6.28.1'};fs.writeFileSync(p, JSON.stringify(j,null,2)+'\n');"
+            set +e
             npm install --package-lock-only --force --ignore-scripts --no-audit
+            OVERRIDE_INSTALL_EXIT=$?
+            set -e
+            mv package.json.bak package.json
+            if [ "$OVERRIDE_INSTALL_EXIT" -ne 0 ]; then
+              exit "$OVERRIDE_INSTALL_EXIT"
+            fi
 
             if [ -n "$REASONS" ]; then
               REASONS="$REASONS Fallback: overrides para @actions/http-client e undici."
@@ -131,10 +140,14 @@ jobs:
             ' "$FINAL_JSON" 2>/dev/null || true)"
 
             if [ -n "$REMAINING_LINES" ]; then
-              printf "\n## %s\n%b\n- Pipeline: %s\n" "$DATE" "$REMAINING_LINES" "$PIPELINE" >> "$GITHUB_WORKSPACE/SECURITY_FIXES.md"
+              CHANGELOG_ENTRIES="${CHANGELOG_ENTRIES}${REMAINING_LINES}"$'\n'
             fi
             popd >/dev/null
           done
+
+          if [ -n "$CHANGELOG_ENTRIES" ]; then
+            printf "\n## %s\n%b- Pipeline: %s\n" "$DATE" "$CHANGELOG_ENTRIES" "$PIPELINE" >> "$GITHUB_WORKSPACE/SECURITY_FIXES.md"
+          fi
 
           echo "had_vulns=$HAD_VULNS" >> "$GITHUB_OUTPUT"
           if [ "$UNRESOLVED_HIGH_CRITICAL" -gt 0 ]; then
@@ -149,7 +162,12 @@ jobs:
           if git diff --quiet; then
             echo "has_changes=false" >> "$GITHUB_OUTPUT"
           else
-            echo "has_changes=true" >> "$GITHUB_OUTPUT"
+            LOCK_CHANGES=$(git diff --name-only | grep -E '^\.github/actions/.+/package-lock\.json$' || true)
+            if [ -n "$LOCK_CHANGES" ]; then
+              echo "has_changes=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "has_changes=false" >> "$GITHUB_OUTPUT"
+            fi
           fi
 
       - name: Create Pull Request
