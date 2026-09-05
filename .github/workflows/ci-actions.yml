@@ -11,7 +11,7 @@ on:
   workflow_dispatch:
     inputs:
       publish:
-        description: "Buildar todas as actions e criar um PR para a main"
+        description: "Builda All Actions (only main)"
         required: false
         default: true
         type: boolean
