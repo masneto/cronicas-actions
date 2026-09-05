@@ -133,6 +133,7 @@ jobs:
             if jq -e '((.vulnerabilities // {}) | has("undici")) or ((.vulnerabilities // {}) | has("@actions/http-client"))' "$AFTER_EXPLICIT_JSON" >/dev/null 2>&1; then
               NEEDS_OVERRIDE_FALLBACK=true
             fi
+            RELEVANT_BEFORE_OVERRIDE=$(jq '(((.vulnerabilities // {}) | has("undici")) | if . then 1 else 0 end) + (((.vulnerabilities // {}) | has("@actions/http-client")) | if . then 1 else 0 end)' "$AFTER_EXPLICIT_JSON" 2>/dev/null || echo 0)
 
             if [ "$EXPLICIT_FALLBACK_APPLIED" = true ]; then
               REASONS="Fallback aplicado: atualização explícita via fixAvailable."
@@ -146,8 +147,15 @@ jobs:
               OVERRIDE_FALLBACK_APPLIED=true
             elif [ "$AFTER_EXPLICIT" -gt 0 ] && [ "$NEEDS_OVERRIDE_FALLBACK" = true ]; then
               npm install --package-lock-only --force --ignore-scripts --no-audit
-              OVERRIDE_FALLBACK_APPLIED=true
-              REASONS="${REASONS} Fallback aplicado: lockfile regenerado com overrides já presentes."
+              RECHECK_OVERRIDE_JSON="$(mktemp)"
+              npm audit --json > "$RECHECK_OVERRIDE_JSON" 2>/dev/null || true
+              RELEVANT_AFTER_OVERRIDE=$(jq '(((.vulnerabilities // {}) | has("undici")) | if . then 1 else 0 end) + (((.vulnerabilities // {}) | has("@actions/http-client")) | if . then 1 else 0 end)' "$RECHECK_OVERRIDE_JSON" 2>/dev/null || echo 0)
+              if [ "$RELEVANT_AFTER_OVERRIDE" -lt "$RELEVANT_BEFORE_OVERRIDE" ]; then
+                OVERRIDE_FALLBACK_APPLIED=true
+                REASONS="${REASONS} Fallback aplicado: lockfile regenerado com overrides já presentes."
+              else
+                REASONS="${REASONS} Fallback com overrides existentes não reduziu as vulnerabilidades alvo."
+              fi
             elif [ "$AFTER_EXPLICIT" -gt 0 ]; then
               REASONS="${REASONS} Fallback de overrides não aplicável para as vulnerabilidades remanescentes."
             else
@@ -213,7 +221,7 @@ jobs:
             while IFS= read -r FILE; do
               [ -z "$FILE" ] && continue
               case "$FILE" in
-                ".github/actions/email-notification-action/package-lock.json"|".github/actions/npm-security-audit/package-lock.json"|".github/actions/preview-docs-action/package-lock.json"|".github/actions/validate-repo/package-lock.json")
+                ".github/actions/email-notification-action/package-lock.json"|".github/actions/npm-security-audit/package-lock.json"|".github/actions/preview-docs-action/package-lock.json"|".github/actions/validate-repo/package-lock.json"|"SECURITY_FIXES.md")
                   HAS_ALLOWED_LOCKFILE_CHANGE=true
                   ;;
                 *)
