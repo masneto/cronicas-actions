@@ -152,7 +152,16 @@ jobs:
                 REASONS="${REASONS} Fallback de overrides executado, mas sem alteração no lockfile."
               fi
             elif [ "$AFTER_EXPLICIT" -gt 0 ] && [ "$NEEDS_OVERRIDE_FALLBACK" = true ]; then
-              npm install --package-lock-only --force --ignore-scripts --no-audit --no-save "@actions/http-client@${OVERRIDE_HTTP_CLIENT_VERSION}" "undici@${OVERRIDE_UNDICI_VERSION}"
+              OVERRIDE_REFRESH_PACKAGES=()
+              if jq -e '(.vulnerabilities // {}) | has("@actions/http-client")' "$AFTER_EXPLICIT_JSON" >/dev/null 2>&1; then
+                OVERRIDE_REFRESH_PACKAGES+=("@actions/http-client@${OVERRIDE_HTTP_CLIENT_VERSION}")
+              fi
+              if jq -e '(.vulnerabilities // {}) | has("undici")' "$AFTER_EXPLICIT_JSON" >/dev/null 2>&1; then
+                OVERRIDE_REFRESH_PACKAGES+=("undici@${OVERRIDE_UNDICI_VERSION}")
+              fi
+              if [ "${#OVERRIDE_REFRESH_PACKAGES[@]}" -gt 0 ]; then
+                npm install --package-lock-only --force --ignore-scripts --no-audit --no-save "${OVERRIDE_REFRESH_PACKAGES[@]}"
+              fi
               RECHECK_OVERRIDE_JSON="$(mktemp)"
               npm audit --json > "$RECHECK_OVERRIDE_JSON" 2>/dev/null || true
               RELEVANT_AFTER_OVERRIDE=$(jq '(((.vulnerabilities // {}) | has("undici")) | if . then 1 else 0 end) + (((.vulnerabilities // {}) | has("@actions/http-client")) | if . then 1 else 0 end)' "$RECHECK_OVERRIDE_JSON" 2>/dev/null || echo 0)
@@ -208,7 +217,7 @@ jobs:
           done
 
           if [ -n "$CHANGELOG_ENTRIES" ]; then
-            printf "\n## %s\n%b- Pipeline: %s\n" "$DATE" "$CHANGELOG_ENTRIES" "$PIPELINE" >> "$GITHUB_WORKSPACE/SECURITY_FIXES.md"
+            printf "\n## %s\n%b- Pipeline: %s\n" "$DATE" "$CHANGELOG_ENTRIES" "$PIPELINE" >> SECURITY_FIXES.md
           fi
 
           echo "had_vulns=$HAD_VULNS" >> "$GITHUB_OUTPUT"
