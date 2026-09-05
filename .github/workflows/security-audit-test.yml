@@ -139,18 +139,25 @@ jobs:
               REASONS="Fallback aplicado: atualização explícita via fixAvailable."
             fi
 
+            LOCKFILE_HASH_BEFORE_OVERRIDE="$(sha256sum package-lock.json 2>/dev/null | awk '{print $1}')"
             OVERRIDE_KEYS_TO_APPLY=$(node -e "const fs=require('fs');const j=JSON.parse(fs.readFileSync('package.json','utf8'));const o=j.overrides||{};const keys=[];if (o['@actions/http-client'] !== '${OVERRIDE_HTTP_CLIENT_VERSION}') keys.push('@actions/http-client'); if (o.undici !== '${OVERRIDE_UNDICI_VERSION}') keys.push('undici'); process.stdout.write(keys.join(','));")
             if [ "$AFTER_EXPLICIT" -gt 0 ] && [ "$NEEDS_OVERRIDE_FALLBACK" = true ] && [ -n "$OVERRIDE_KEYS_TO_APPLY" ]; then
               if ! apply_override_fallback; then
                 exit 1
               fi
-              OVERRIDE_FALLBACK_APPLIED=true
+              LOCKFILE_HASH_AFTER_OVERRIDE="$(sha256sum package-lock.json 2>/dev/null | awk '{print $1}')"
+              if [ "$LOCKFILE_HASH_AFTER_OVERRIDE" != "$LOCKFILE_HASH_BEFORE_OVERRIDE" ]; then
+                OVERRIDE_FALLBACK_APPLIED=true
+              else
+                REASONS="${REASONS} Fallback de overrides executado, mas sem alteração no lockfile."
+              fi
             elif [ "$AFTER_EXPLICIT" -gt 0 ] && [ "$NEEDS_OVERRIDE_FALLBACK" = true ]; then
               npm install --package-lock-only --force --ignore-scripts --no-audit
               RECHECK_OVERRIDE_JSON="$(mktemp)"
               npm audit --json > "$RECHECK_OVERRIDE_JSON" 2>/dev/null || true
               RELEVANT_AFTER_OVERRIDE=$(jq '(((.vulnerabilities // {}) | has("undici")) | if . then 1 else 0 end) + (((.vulnerabilities // {}) | has("@actions/http-client")) | if . then 1 else 0 end)' "$RECHECK_OVERRIDE_JSON" 2>/dev/null || echo 0)
-              if [ "$RELEVANT_AFTER_OVERRIDE" -lt "$RELEVANT_BEFORE_OVERRIDE" ]; then
+              LOCKFILE_HASH_AFTER_OVERRIDE="$(sha256sum package-lock.json 2>/dev/null | awk '{print $1}')"
+              if [ "$RELEVANT_AFTER_OVERRIDE" -lt "$RELEVANT_BEFORE_OVERRIDE" ] && [ "$LOCKFILE_HASH_AFTER_OVERRIDE" != "$LOCKFILE_HASH_BEFORE_OVERRIDE" ]; then
                 OVERRIDE_FALLBACK_APPLIED=true
                 REASONS="${REASONS} Fallback aplicado: lockfile regenerado com overrides já presentes."
               else
@@ -252,7 +259,7 @@ jobs:
             This PR contains security fixes detected by `npm audit` in the shared GitHub Actions.
 
             See the workflow summary for the complete before/after report and updated packages.
-            The detailed history is recorded in `SECURITY_FIXES.md`.
+            Quando houver vulnerabilidades remanescentes, o histórico detalhado é registrado em `SECURITY_FIXES.md`.
           branch: security/npm-audit-fixes-test
           delete-branch: true
           labels: |
