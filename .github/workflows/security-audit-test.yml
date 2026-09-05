@@ -1,0 +1,227 @@
+name: Security Audit - cronicas-actions-test
+
+on:
+  schedule:
+    - cron: '0 2 * * *'
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - '.github/workflows/**'
+      - ".github/actions/**" #remover depois       
+  workflow_dispatch:
+
+jobs:
+  audit:
+    name: Audit & Fix Actions
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: |
+            .github/actions/email-notification-action/package-lock.json
+            .github/actions/npm-security-audit/package-lock.json
+            .github/actions/preview-docs-action/package-lock.json
+            .github/actions/validate-repo/package-lock.json
+
+      - name: Install dependencies
+        shell: bash
+        run: |
+          for directory in \
+            .github/actions/email-notification-action \
+            .github/actions/npm-security-audit \
+            .github/actions/preview-docs-action \
+            .github/actions/validate-repo; do
+            echo "Installing dependencies in $directory"
+            npm ci --prefix "$directory"
+          done
+
+      - name: Fix email notification vulnerabilities and report details
+        id: email
+        working-directory: .github/actions/email-notification-action
+        shell: bash
+        run: |
+          echo "## Email Notification Action - Antes do fix" >> "$GITHUB_STEP_SUMMARY"
+          BEFORE=$(npm audit --json 2>/dev/null | jq '.metadata.vulnerabilities | .moderate + .high + .critical' 2>/dev/null || echo 0)
+          npm audit --json 2>/dev/null | jq -r '.vulnerabilities | to_entries[] | "- **\(.key)** (\(.value.severity)): \(.value.via[0].title // .value.via[0])"' >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || true
+
+          npm audit fix --force || true
+
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "## Email Notification Action - Depois do fix" >> "$GITHUB_STEP_SUMMARY"
+          AFTER=$(npm audit --json 2>/dev/null | jq '.metadata.vulnerabilities | .moderate + .high + .critical' 2>/dev/null || echo 0)
+          FIXED=$((BEFORE - AFTER))
+          echo "- Vulnerabilidades antes: **$BEFORE**" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Vulnerabilidades depois: **$AFTER**" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Corrigidas automaticamente: **$FIXED** ✅" >> "$GITHUB_STEP_SUMMARY"
+
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "## Email Notification Action - Packages atualizados" >> "$GITHUB_STEP_SUMMARY"
+          PKGS=$(git diff -- .github/actions/email-notification-action/package-lock.json | grep -E '^\+\s+"version"' | awk -F'"' '{print "- " $4}' | sort -u)
+          [ -n "$PKGS" ] && echo "$PKGS" >> "$GITHUB_STEP_SUMMARY" || echo "_Nenhuma mudança_" >> "$GITHUB_STEP_SUMMARY"
+
+          if [ "$BEFORE" -gt 0 ] 2>/dev/null; then
+            echo "had_vulns=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Fix npm security audit vulnerabilities and report details
+        id: security
+        working-directory: .github/actions/npm-security-audit
+        shell: bash
+        run: |
+          echo "## NPM Security Audit Action - Antes do fix" >> "$GITHUB_STEP_SUMMARY"
+          BEFORE=$(npm audit --json 2>/dev/null | jq '.metadata.vulnerabilities | .moderate + .high + .critical' 2>/dev/null || echo 0)
+          npm audit --json 2>/dev/null | jq -r '.vulnerabilities | to_entries[] | "- **\(.key)** (\(.value.severity)): \(.value.via[0].title // .value.via[0])"' >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || true
+
+          npm audit fix --force || true
+
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "## NPM Security Audit Action - Depois do fix" >> "$GITHUB_STEP_SUMMARY"
+          AFTER=$(npm audit --json 2>/dev/null | jq '.metadata.vulnerabilities | .moderate + .high + .critical' 2>/dev/null || echo 0)
+          FIXED=$((BEFORE - AFTER))
+          echo "- Vulnerabilidades antes: **$BEFORE**" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Vulnerabilidades depois: **$AFTER**" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Corrigidas automaticamente: **$FIXED** ✅" >> "$GITHUB_STEP_SUMMARY"
+
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "## NPM Security Audit Action - Packages atualizados" >> "$GITHUB_STEP_SUMMARY"
+          PKGS=$(git diff -- .github/actions/npm-security-audit/package-lock.json | grep -E '^\+\s+"version"' | awk -F'"' '{print "- " $4}' | sort -u)
+          [ -n "$PKGS" ] && echo "$PKGS" >> "$GITHUB_STEP_SUMMARY" || echo "_Nenhuma mudança_" >> "$GITHUB_STEP_SUMMARY"
+
+          if [ "$BEFORE" -gt 0 ] 2>/dev/null; then
+            echo "had_vulns=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Fix preview docs vulnerabilities and report details
+        id: preview
+        working-directory: .github/actions/preview-docs-action
+        shell: bash
+        run: |
+          echo "## Preview Docs Action - Antes do fix" >> "$GITHUB_STEP_SUMMARY"
+          BEFORE=$(npm audit --json 2>/dev/null | jq '.metadata.vulnerabilities | .moderate + .high + .critical' 2>/dev/null || echo 0)
+          npm audit --json 2>/dev/null | jq -r '.vulnerabilities | to_entries[] | "- **\(.key)** (\(.value.severity)): \(.value.via[0].title // .value.via[0])"' >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || true
+
+          npm audit fix --force || true
+
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "## Preview Docs Action - Depois do fix" >> "$GITHUB_STEP_SUMMARY"
+          AFTER=$(npm audit --json 2>/dev/null | jq '.metadata.vulnerabilities | .moderate + .high + .critical' 2>/dev/null || echo 0)
+          FIXED=$((BEFORE - AFTER))
+          echo "- Vulnerabilidades antes: **$BEFORE**" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Vulnerabilidades depois: **$AFTER**" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Corrigidas automaticamente: **$FIXED** ✅" >> "$GITHUB_STEP_SUMMARY"
+
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "## Preview Docs Action - Packages atualizados" >> "$GITHUB_STEP_SUMMARY"
+          PKGS=$(git diff -- .github/actions/preview-docs-action/package-lock.json | grep -E '^\+\s+"version"' | awk -F'"' '{print "- " $4}' | sort -u)
+          [ -n "$PKGS" ] && echo "$PKGS" >> "$GITHUB_STEP_SUMMARY" || echo "_Nenhuma mudança_" >> "$GITHUB_STEP_SUMMARY"
+
+          if [ "$BEFORE" -gt 0 ] 2>/dev/null; then
+            echo "had_vulns=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Fix validate repo vulnerabilities and report details
+        id: validate
+        working-directory: .github/actions/validate-repo
+        shell: bash
+        run: |
+          echo "## Validate Repo Action - Antes do fix" >> "$GITHUB_STEP_SUMMARY"
+          BEFORE=$(npm audit --json 2>/dev/null | jq '.metadata.vulnerabilities | .moderate + .high + .critical' 2>/dev/null || echo 0)
+          npm audit --json 2>/dev/null | jq -r '.vulnerabilities | to_entries[] | "- **\(.key)** (\(.value.severity)): \(.value.via[0].title // .value.via[0])"' >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || true
+
+          npm audit fix --force || true
+
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "## Validate Repo Action - Depois do fix" >> "$GITHUB_STEP_SUMMARY"
+          AFTER=$(npm audit --json 2>/dev/null | jq '.metadata.vulnerabilities | .moderate + .high + .critical' 2>/dev/null || echo 0)
+          FIXED=$((BEFORE - AFTER))
+          echo "- Vulnerabilidades antes: **$BEFORE**" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Vulnerabilidades depois: **$AFTER**" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Corrigidas automaticamente: **$FIXED** ✅" >> "$GITHUB_STEP_SUMMARY"
+
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "## Validate Repo Action - Packages atualizados" >> "$GITHUB_STEP_SUMMARY"
+          PKGS=$(git diff -- .github/actions/validate-repo/package-lock.json | grep -E '^\+\s+"version"' | awk -F'"' '{print "- " $4}' | sort -u)
+          [ -n "$PKGS" ] && echo "$PKGS" >> "$GITHUB_STEP_SUMMARY" || echo "_Nenhuma mudança_" >> "$GITHUB_STEP_SUMMARY"
+
+          if [ "$BEFORE" -gt 0 ] 2>/dev/null; then
+            echo "had_vulns=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Append to security fixes changelog
+        if: steps.email.outputs.had_vulns == 'true' || steps.security.outputs.had_vulns == 'true' || steps.preview.outputs.had_vulns == 'true' || steps.validate.outputs.had_vulns == 'true'
+        shell: bash
+        run: |
+          DATE=$(date -u '+%Y-%m-%d')
+          PIPELINE="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+
+          build_entries() {
+            local DIR=$1 LABEL=$2
+            cd "$DIR"
+            npm audit --json 2>/dev/null | jq -r --arg label "$LABEL" '
+              .vulnerabilities | to_entries[]
+              | "- **\($label):** \(.key) `\(.value.via[0].range // "?")` → `\(.value.fixAvailable.version // "fixed")` — _\(.value.via[0].title // \(.value.via[0] // "sem detalhes"))_ (\(.value.severity))"
+            ' 2>/dev/null || true
+            cd - > /dev/null
+          }
+
+          ENTRIES=""
+          ENTRIES+="$(build_entries .github/actions/email-notification-action 'Email Notification Action')\n"
+          ENTRIES+="$(build_entries .github/actions/npm-security-audit 'NPM Security Audit Action')\n"
+          ENTRIES+="$(build_entries .github/actions/preview-docs-action 'Preview Docs Action')\n"
+          ENTRIES+="$(build_entries .github/actions/validate-repo 'Validate Repo Action')\n"
+
+          printf "\n## %s\n%b- Pipeline: %s\n" "$DATE" "$ENTRIES" "$PIPELINE" >> SECURITY_FIXES.md
+
+      - name: Check for changes
+        id: changes
+        shell: bash
+        run: |
+          if git diff --quiet; then
+            echo "has_changes=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_changes=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Create Pull Request
+        if: (steps.email.outputs.had_vulns == 'true' || steps.security.outputs.had_vulns == 'true' || steps.preview.outputs.had_vulns == 'true' || steps.validate.outputs.had_vulns == 'true') && steps.changes.outputs.has_changes == 'true'
+        id: pr
+        uses: peter-evans/create-pull-request@v8
+        with:
+          commit-message: 'fix(security): npm audit fixes'
+          title: 'Security: npm audit fixes (${{ github.run_id }})'
+          body: |
+            ## Automatic Security Update
+
+            This PR contains security fixes detected by `npm audit` in the shared GitHub Actions.
+
+            See the workflow summary for the complete before/after report and updated packages.
+            The detailed history is recorded in `SECURITY_FIXES.md`.
+          branch: security/npm-audit-fixes-test
+          delete-branch: true
+          labels: |
+            security
+            dependencies
+            automated
+          reviewers: |
+            masneto
+
+      - name: Merge Pull Request
+        if: steps.pr.outputs.pull-request-number != ''
+        shell: bash
+        run: |
+          curl -s -X PUT \
+            -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Accept: application/vnd.github.v3+json" \
+            "https://api.github.com/repos/${{ github.repository }}/pulls/${{ steps.pr.outputs.pull-request-number }}/merge" \
+            -d "{\n              \"commit_title\": \"fix(security): npm audit fixes\",\n              \"merge_method\": \"squash\"\n            }"
