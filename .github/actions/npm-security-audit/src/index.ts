@@ -66,21 +66,16 @@ function changelogEntries(audit: AuditResult, label: string): string[] {
   return Object.entries(audit.vulnerabilities || {}).map(([name, vulnerability]) => {
     const detail = advisoryDetails(vulnerability)[0] || { title: 'sem detalhes', range: '?' };
     const fix = fixVersion(vulnerability);
-    return `- **${label}:** ${name} \`${detail.range}\` -> \`${fix}\` - *${detail.title}* (${vulnerability.severity || 'unknown'})`;
+    return `- **${label}:** ${name} \`${detail.range}\` -> \`${fix}\` - _${detail.title}_ (${vulnerability.severity || 'unknown'})`;
   });
 }
 
-function updateChangelog(file: string, audit: AuditResult, label: string, beforeCount: number, changes: string[]): void {
+function updateChangelog(file: string, audit: AuditResult, label: string): void {
   const date = new Date().toISOString().slice(0, 10);
   const pipeline = `${process.env.GITHUB_SERVER_URL || 'https://github.com'}/${process.env.GITHUB_REPOSITORY || ''}/actions/runs/${process.env.GITHUB_RUN_ID || ''}`;
   const entries = Object.keys(audit.vulnerabilities || {}).length > 0
     ? changelogEntries(audit, label)
-    : changes.length > 0
-      ? [`- **${label}:** dependências corrigidas:`, ...changes.map((change) => `  ${change}`)]
-    : beforeCount > 0
-      ? [`- **${label}:** ${beforeCount} vulnerabilidade(s) corrigida(s) automaticamente.`]
-      : [];
-  if (!entries.length) return;
+    : [`- ${label}: sem vulnerabilidades`];
 
   let content = fs.existsSync(file)
     ? fs.readFileSync(file, 'utf8')
@@ -90,16 +85,23 @@ function updateChangelog(file: string, audit: AuditResult, label: string, before
   const existingHeading = content.indexOf(`${heading}\n`);
   if (existingHeading >= 0) {
     const nextHeading = content.indexOf('\n## ', existingHeading + heading.length);
-    const sectionEnd = nextHeading >= 0 ? nextHeading : content.length;
-    const section = content.slice(existingHeading, sectionEnd);
-    if (!section.includes(`**${label}:**`)) {
-      const insertion = `\n${entryText}\n- Pipeline: [${pipeline}](${pipeline})\n`;
+    let sectionEnd = nextHeading >= 0 ? nextHeading : content.length;
+    let section = content.slice(existingHeading, sectionEnd);
+    if (!section.includes(`**${label}:**`) && !section.includes(`- ${label}: sem vulnerabilidades`)) {
+      const insertion = `\n${entryText}\n`;
       const headingEnd = existingHeading + heading.length + 1;
       content = content.slice(0, headingEnd) + insertion + content.slice(headingEnd);
+      sectionEnd += insertion.length;
+      section = content.slice(existingHeading, sectionEnd);
     }
+    const sectionLines = section
+      .split('\n')
+      .filter((line) => !line.startsWith('- Pipeline:'));
+    section = `${sectionLines.join('\n').trimEnd()}\n- Pipeline: ${pipeline}\n`;
+    content = content.slice(0, existingHeading) + section + content.slice(sectionEnd);
   } else {
     const firstSection = content.indexOf('\n## ');
-    const block = `\n${heading}\n\n${entryText}\n- Pipeline: [${pipeline}](${pipeline})\n`;
+    const block = `\n${heading}\n\n${entryText}\n- Pipeline: ${pipeline}\n`;
     content = firstSection >= 0
       ? content.slice(0, firstSection) + block + content.slice(firstSection)
       : `${content.trimEnd()}${block}\n`;
@@ -214,8 +216,8 @@ export async function run(): Promise<void> {
     core.setOutput('before', beforeCount);
     core.setOutput('after', finalCount);
     core.setOutput('audit-before-file', beforeAudit);
-    if (changelogPath && beforeCount > 0) {
-      updateChangelog(path.resolve(workspace, changelogPath), final, label, beforeCount, changes);
+    if (changelogPath) {
+      updateChangelog(path.resolve(workspace, changelogPath), before, label);
     }
     const summaryLines = [
       `## ${label}`,
