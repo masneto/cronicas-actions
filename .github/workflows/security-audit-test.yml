@@ -50,8 +50,6 @@ jobs:
           DATE=$(date -u '+%Y-%m-%d')
           PIPELINE="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
           CHANGELOG_ENTRIES=""
-          OVERRIDE_HTTP_CLIENT_VERSION='^3.0.2'
-          OVERRIDE_UNDICI_VERSION='^6.28.1'
 
           audit_count() {
             local FILE="$1"
@@ -64,6 +62,7 @@ jobs:
           }
 
           apply_override_fallback() {
+            local AUDIT_FILE="$1"
             local BACKUP_FILE
             BACKUP_FILE="$(mktemp)"
             cp package.json "$BACKUP_FILE"
@@ -75,7 +74,23 @@ jobs:
             trap restore_package_json EXIT INT TERM
 
             set +e
-            node -e "const fs=require('fs');const p='package.json';const j=JSON.parse(fs.readFileSync(p,'utf8'));j.overrides=j.overrides||{};if (j.overrides['@actions/http-client'] !== '${OVERRIDE_HTTP_CLIENT_VERSION}') j.overrides['@actions/http-client']='${OVERRIDE_HTTP_CLIENT_VERSION}'; if (j.overrides.undici !== '${OVERRIDE_UNDICI_VERSION}') j.overrides.undici='${OVERRIDE_UNDICI_VERSION}';fs.writeFileSync(p, JSON.stringify(j,null,2)+'\n');"
+            node - "$AUDIT_FILE" <<'NODE'
+            const fs = require('fs');
+            const audit = JSON.parse(fs.readFileSync(process.argv[1], 'utf8'));
+            const packageFile = 'package.json';
+            const packageJson = JSON.parse(fs.readFileSync(packageFile, 'utf8'));
+            const overrides = { ...(packageJson.overrides || {}) };
+
+            for (const vulnerability of Object.values(audit.vulnerabilities || {})) {
+              const fix = vulnerability.fixAvailable;
+              if (fix && typeof fix === 'object' && fix.name && fix.version) {
+                overrides[fix.name] = fix.version;
+              }
+            }
+
+            packageJson.overrides = overrides;
+            fs.writeFileSync(packageFile, JSON.stringify(packageJson, null, 2) + '\n');
+            NODE
             local NODE_EXIT=$?
             local INSTALL_EXIT=0
             if [ "$NODE_EXIT" -eq 0 ]; then
@@ -135,19 +150,17 @@ jobs:
             npm audit --json > "$AFTER_EXPLICIT_JSON" 2>/dev/null || true
             AFTER_EXPLICIT="$(audit_count "$AFTER_EXPLICIT_JSON")"
             NEEDS_OVERRIDE_FALLBACK=false
-            if jq -e '((.vulnerabilities // {}) | has("undici")) or ((.vulnerabilities // {}) | has("@actions/http-client"))' "$AFTER_EXPLICIT_JSON" >/dev/null 2>&1; then
+            if jq -e '[.vulnerabilities[]? | select(.fixAvailable | type == "object" and .name and .version)] | length > 0' "$AFTER_EXPLICIT_JSON" >/dev/null 2>&1; then
               NEEDS_OVERRIDE_FALLBACK=true
             fi
-            RELEVANT_BEFORE_OVERRIDE=$(jq '(((.vulnerabilities // {}) | has("undici")) | if . then 1 else 0 end) + (((.vulnerabilities // {}) | has("@actions/http-client")) | if . then 1 else 0 end)' "$AFTER_EXPLICIT_JSON" 2>/dev/null || echo 0)
 
             if [ "$EXPLICIT_FALLBACK_APPLIED" = true ]; then
               REASONS="Fallback aplicado: atualização explícita via fixAvailable."
             fi
 
             LOCKFILE_HASH_BEFORE_OVERRIDE="$(sha256sum package-lock.json 2>/dev/null | awk '{print $1}')"
-            OVERRIDE_KEYS_TO_APPLY=$(node -e "const fs=require('fs');const j=JSON.parse(fs.readFileSync('package.json','utf8'));const o=j.overrides||{};const keys=[];if (o['@actions/http-client'] !== '${OVERRIDE_HTTP_CLIENT_VERSION}') keys.push('@actions/http-client'); if (o.undici !== '${OVERRIDE_UNDICI_VERSION}') keys.push('undici'); process.stdout.write(keys.join(','));")
-            if [ "$AFTER_EXPLICIT" -gt 0 ] && [ "$NEEDS_OVERRIDE_FALLBACK" = true ] && [ -n "$OVERRIDE_KEYS_TO_APPLY" ]; then
-              if ! apply_override_fallback; then
+            if [ "$AFTER_EXPLICIT" -gt 0 ] && [ "$NEEDS_OVERRIDE_FALLBACK" = true ]; then
+              if ! apply_override_fallback "$AFTER_EXPLICIT_JSON"; then
                 exit 1
               fi
               LOCKFILE_HASH_AFTER_OVERRIDE="$(sha256sum package-lock.json 2>/dev/null | awk '{print $1}')"
@@ -156,28 +169,6 @@ jobs:
               else
                 REASONS="${REASONS} Fallback de overrides executado, mas sem alteração no lockfile."
               fi
-            elif [ "$AFTER_EXPLICIT" -gt 0 ] && [ "$NEEDS_OVERRIDE_FALLBACK" = true ]; then
-              OVERRIDE_REFRESH_PACKAGES=()
-              if jq -e '(.vulnerabilities // {}) | has("@actions/http-client")' "$AFTER_EXPLICIT_JSON" >/dev/null 2>&1; then
-                OVERRIDE_REFRESH_PACKAGES+=("@actions/http-client@${OVERRIDE_HTTP_CLIENT_VERSION}")
-              fi
-              if jq -e '(.vulnerabilities // {}) | has("undici")' "$AFTER_EXPLICIT_JSON" >/dev/null 2>&1; then
-                OVERRIDE_REFRESH_PACKAGES+=("undici@${OVERRIDE_UNDICI_VERSION}")
-              fi
-              if [ "${#OVERRIDE_REFRESH_PACKAGES[@]}" -gt 0 ]; then
-                npm install --package-lock-only --force --ignore-scripts --no-audit --no-save "${OVERRIDE_REFRESH_PACKAGES[@]}"
-              fi
-              RECHECK_OVERRIDE_JSON="$(mktemp)"
-              npm audit --json > "$RECHECK_OVERRIDE_JSON" 2>/dev/null || true
-              RELEVANT_AFTER_OVERRIDE=$(jq '(((.vulnerabilities // {}) | has("undici")) | if . then 1 else 0 end) + (((.vulnerabilities // {}) | has("@actions/http-client")) | if . then 1 else 0 end)' "$RECHECK_OVERRIDE_JSON" 2>/dev/null || echo 0)
-              LOCKFILE_HASH_AFTER_OVERRIDE="$(sha256sum package-lock.json 2>/dev/null | awk '{print $1}')"
-              if [ "$RELEVANT_AFTER_OVERRIDE" -lt "$RELEVANT_BEFORE_OVERRIDE" ] && [ "$LOCKFILE_HASH_AFTER_OVERRIDE" != "$LOCKFILE_HASH_BEFORE_OVERRIDE" ]; then
-                OVERRIDE_FALLBACK_APPLIED=true
-                REASONS="${REASONS} Fallback aplicado: lockfile regenerado com overrides já presentes."
-              else
-                REASONS="${REASONS} Fallback com overrides existentes não reduziu as vulnerabilidades alvo."
-              fi
-              rm -f "$RECHECK_OVERRIDE_JSON"
             elif [ "$AFTER_EXPLICIT" -gt 0 ]; then
               REASONS="${REASONS} Fallback de overrides não aplicável para as vulnerabilidades remanescentes."
             else
@@ -185,9 +176,9 @@ jobs:
             fi
 
             if [ "$OVERRIDE_FALLBACK_APPLIED" = true ] && [ -n "$REASONS" ]; then
-              REASONS="$REASONS Fallback aplicado: overrides para @actions/http-client e undici."
+              REASONS="$REASONS Fallback aplicado com a versão recomendada pelo npm audit."
             elif [ "$OVERRIDE_FALLBACK_APPLIED" = true ]; then
-              REASONS="Fallback aplicado: overrides para @actions/http-client e undici."
+              REASONS="Fallback aplicado com a versão recomendada pelo npm audit."
             elif [ -z "$REASONS" ]; then
               REASONS="Nenhum fallback aplicado."
             fi
