@@ -90,7 +90,7 @@ jobs:
 
             packageJson.overrides = overrides;
             fs.writeFileSync(packageFile, JSON.stringify(packageJson, null, 2) + '\n');
-            NODE
+          NODE
             local NODE_EXIT=$?
             local INSTALL_EXIT=0
             if [ "$NODE_EXIT" -eq 0 ]; then
