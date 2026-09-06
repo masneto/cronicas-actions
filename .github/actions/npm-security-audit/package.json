@@ -1,6 +1,7 @@
 {
   "name": "npm-security-audit-action",
   "version": "1.0.0",
+  "type": "module",
   "description": "Action para auditar e corrigir dependencias npm.",
   "main": "dist/index.js",
   "scripts": {
@@ -8,8 +9,8 @@
     "lint": "eslint ."
   },
   "dependencies": {
-    "@actions/core": "^2.3.1",
-    "@actions/exec": "^2.0.2"
+    "@actions/core": "^3.0.1",
+    "@actions/exec": "^3.0.0"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

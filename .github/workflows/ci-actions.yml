@@ -58,8 +58,8 @@ jobs:
             cd "$action"
 
             if [ -f package.json ]; then
-              echo "Synchronizing package-lock.json..."
-              npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+              echo "Install dependencies..."
+              npm install
 
               echo "Installing dependencies from lockfile..."
               npm ci --no-audit --no-fund
