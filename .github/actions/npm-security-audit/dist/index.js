@@ -31378,7 +31378,7 @@ function fixedPackageChanges(before, after, beforeFile, afterFile) {
         const oldVersion = packagePath ? beforeLock[packagePath]?.version : undefined;
         const newPath = Object.keys(afterLock).find((candidate) => candidate === `node_modules/${name}` || candidate.endsWith(`/node_modules/${name}`));
         const newVersion = newPath ? afterLock[newPath]?.version : undefined;
-        return `- **${name}**: \`${oldVersion || 'não informado'}\` -> \`${newVersion || 'corrigido'}\``;
+        return `- \`${name}\`: \`${oldVersion || 'não informado'}\` -> \`${newVersion || 'corrigido'}\``;
     });
 }
 function changelogEntries(audit, label) {
@@ -31511,7 +31511,7 @@ async function run() {
         info(`${label}: ${beforeCount} vulnerabilidade(s) antes do fix.`);
         await runCommand('npm', ['audit', 'fix', '--force'], cwd);
         await runCommand('npm', ['audit', '--json'], cwd, afterFixAudit);
-        const explicitFallbackApplied = await applyFallbacks(afterFixAudit, cwd);
+        await applyFallbacks(afterFixAudit, cwd);
         await runCommand('npm', ['audit', '--json'], cwd, afterExplicitAudit);
         const final = JSON.parse(external_fs_namespaceObject.readFileSync(afterExplicitAudit, 'utf8'));
         const changes = fixedPackageChanges(before, final, beforeLock, afterLock);
@@ -31524,18 +31524,17 @@ async function run() {
         if (changelogPath && beforeCount > 0) {
             updateChangelog(external_path_namespaceObject.resolve(workspace, changelogPath), final, label, beforeCount, changes);
         }
-        summary.addHeading(label, 2);
-        summary.addRaw(`- Corrigidas: **${Math.max(0, beforeCount - finalCount)}**`).addEOL();
-        summary.addRaw(`- Não corrigidas: **${finalCount}**`).addEOL();
-        summary.addRaw(`- Motivo: *${finalCount === 0 ? 'corrigido por npm audit fix e/ou fallback' : 'vulnerabilidades remanescentes após fallback'}*`).addEOL();
+        const summaryLines = [
+            `## ${label}`,
+            '',
+            `- Corrigidas: **${Math.max(0, beforeCount - finalCount)}**`,
+            `- Não corrigidas: **${finalCount}**`,
+        ];
         if (changes.length) {
-            summary.addRaw('- Dependências corrigidas:').addEOL();
-            summary.addList(changes.map((change) => change.replace(/^- /, '')));
+            summaryLines.push('- Dependências corrigidas:');
+            summaryLines.push(...changes);
         }
-        const fallbackReason = explicitFallbackApplied
-            ? 'Fallback aplicado com a versão recomendada pelo npm audit.'
-            : 'Fallback de overrides não necessário (vulnerabilidades resolvidas antes desta etapa).';
-        summary.addRaw(`- Ação de fallback aplicada: ${fallbackReason}`).addEOL();
+        summary.addRaw(`${summaryLines.join('\n')}\n\n`);
         await summary.write();
     }
     catch (error) {
