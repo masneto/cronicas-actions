@@ -97,10 +97,14 @@ function changelogEntries(audit, label) {
         return `- **${label}:** ${name} \`${range}\` -> \`${fix}\` - _${title}_ (${vulnerability.severity || 'unknown'})`;
     });
 }
-function updateChangelog(file, audit, label) {
+function updateChangelog(file, audit, label, changes, beforeCount) {
     const date = new Date().toISOString().slice(0, 10);
     const pipeline = `${process.env.GITHUB_SERVER_URL || 'https://github.com'}/${process.env.GITHUB_REPOSITORY || ''}/actions/runs/${process.env.GITHUB_RUN_ID || ''}`;
-    const entries = changelogEntries(audit, label);
+    const entries = changes.length
+        ? [`- **${label}:** dependências corrigidas:`, ...changes.map((change) => `  ${change}`)]
+        : beforeCount > 0
+            ? [`- **${label}:** ${beforeCount} vulnerabilidade(s) corrigida(s) automaticamente.`]
+            : changelogEntries(audit, label);
     if (!entries.length)
         return;
     let content = fs.existsSync(file)
@@ -114,13 +118,13 @@ function updateChangelog(file, audit, label) {
         const sectionEnd = nextHeading >= 0 ? nextHeading : content.length;
         const section = content.slice(existingHeading, sectionEnd);
         if (!section.includes(`**${label}:**`)) {
-            const insertion = `\n${entryText}\n`;
+            const insertion = `\n${entryText}\n- Pipeline: [${pipeline}](${pipeline})\n`;
             content = content.slice(0, sectionEnd) + insertion + content.slice(sectionEnd);
         }
     }
     else {
         const firstSection = content.indexOf('\n## ');
-        const block = `\n${heading}\n\n${entryText}\n- Pipeline: ${pipeline}\n`;
+        const block = `\n${heading}\n\n${entryText}\n- Pipeline: [${pipeline}](${pipeline})\n`;
         content = firstSection >= 0
             ? content.slice(0, firstSection) + block + content.slice(firstSection)
             : `${content.trimEnd()}${block}\n`;
@@ -140,6 +144,41 @@ async function runCommand(command, args, cwd, outputFile) {
     if (outputFile)
         fs.writeFileSync(outputFile, output || '{}');
     return exitCode;
+}
+async function applyFallbacks(auditFile, cwd) {
+    const audit = JSON.parse(fs.readFileSync(auditFile, 'utf8'));
+    const fixes = [...new Set(Object.values(audit.vulnerabilities || {})
+            .map((vulnerability) => vulnerability.fixAvailable)
+            .filter((fix) => typeof fix === 'object' && Boolean(fix?.name) && Boolean(fix?.version))
+            .map((fix) => `${fix.name}@${fix.version}`))];
+    for (const fix of fixes) {
+        await runCommand('npm', ['install', '--package-lock-only', '--force', '--ignore-scripts', '--no-audit', '--no-save', fix], cwd);
+    }
+    const refreshedAudit = path.join(os.tmpdir(), `${path.basename(auditFile)}-fallback.json`);
+    await runCommand('npm', ['audit', '--json'], cwd, refreshedAudit);
+    const remaining = JSON.parse(fs.readFileSync(refreshedAudit, 'utf8'));
+    const overrideFixes = Object.values(remaining.vulnerabilities || {})
+        .map((vulnerability) => vulnerability.fixAvailable)
+        .filter((fix) => typeof fix === 'object' && Boolean(fix?.name) && Boolean(fix?.version));
+    if (overrideFixes.length === 0) {
+        fs.rmSync(refreshedAudit, { force: true });
+        return;
+    }
+    const packageFile = path.join(cwd, 'package.json');
+    const backup = fs.readFileSync(packageFile, 'utf8');
+    try {
+        const packageJson = JSON.parse(backup);
+        const overrides = { ...(packageJson.overrides || {}) };
+        for (const fix of overrideFixes)
+            overrides[fix.name] = fix.version;
+        packageJson.overrides = overrides;
+        fs.writeFileSync(packageFile, `${JSON.stringify(packageJson, null, 2)}\n`);
+        await runCommand('npm', ['install', '--package-lock-only', '--force', '--ignore-scripts', '--no-audit'], cwd);
+    }
+    finally {
+        fs.writeFileSync(packageFile, backup);
+        fs.rmSync(refreshedAudit, { force: true });
+    }
 }
 async function run() {
     try {
@@ -175,6 +214,8 @@ async function run() {
         const force = core.getInput('force') !== 'false';
         await runCommand('npm', force ? ['audit', 'fix', '--force'] : ['audit', 'fix'], cwd);
         await runCommand('npm', ['audit', '--json'], cwd, afterAudit);
+        await applyFallbacks(afterAudit, cwd);
+        await runCommand('npm', ['audit', '--json'], cwd, afterAudit);
         const after = JSON.parse(fs.readFileSync(afterAudit, 'utf8'));
         const changes = packageChanges(beforeLock, afterLock);
         const finalCount = vulnerabilityCount(after);
@@ -184,7 +225,7 @@ async function run() {
         core.setOutput('after', finalCount);
         core.setOutput('audit-before-file', beforeAudit);
         if (changelogPath && beforeCount > 0) {
-            updateChangelog(path.resolve(workspace, changelogPath), after, label);
+            updateChangelog(path.resolve(workspace, changelogPath), after, label, changes, beforeCount);
         }
         core.summary.addHeading(label, 2);
         core.summary.addRaw(`**Antes do fix:** ${beforeCount} vulnerabilidade(s)`).addEOL();
