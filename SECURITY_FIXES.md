@@ -21,4 +21,4 @@
 - **NPM Security Audit Action:** 1 vulnerabilidade(s) corrigida(s) automaticamente.
 - **Preview Docs Action:** 1 vulnerabilidade(s) corrigida(s) automaticamente.
 - **Validate Repo Action:** 1 vulnerabilidade(s) corrigida(s) automaticamente.
-- Pipeline: [https://github.com/masneto/cronicas-actions/actions/runs/34002426516](https://github.com/masneto/cronicas-actions/actions/runs/34002426516)
+- Pipeline: https://github.com/masneto/cronicas-actions/actions/runs/34007354936
