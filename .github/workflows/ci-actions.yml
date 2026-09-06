@@ -62,7 +62,7 @@ jobs:
               npm install
 
               echo "Installing dependencies from lockfile..."
-              npm ci --no-audit --no-fund
+              npm ci
 
               echo "Running linter..."
               npm run lint

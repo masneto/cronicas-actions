@@ -66,7 +66,7 @@ function changelogEntries(audit: AuditResult, label: string): string[] {
   return Object.entries(audit.vulnerabilities || {}).map(([name, vulnerability]) => {
     const detail = advisoryDetails(vulnerability)[0] || { title: 'sem detalhes', range: '?' };
     const fix = fixVersion(vulnerability);
-    return `- **${label}:** ${name} \`${detail.range}\` -> disponível: \`${fix}\` — _${detail.title}_ (${vulnerability.severity || 'unknown'}, remanescente após o fix)`;
+    return `- **${label}:** ${name} \`${detail.range}\` -> \`${fix}\` - *${detail.title}* (${vulnerability.severity || 'unknown'})`;
   });
 }
 
@@ -94,7 +94,8 @@ function updateChangelog(file: string, audit: AuditResult, label: string, before
     const section = content.slice(existingHeading, sectionEnd);
     if (!section.includes(`**${label}:**`)) {
       const insertion = `\n${entryText}\n- Pipeline: [${pipeline}](${pipeline})\n`;
-      content = content.slice(0, sectionEnd) + insertion + content.slice(sectionEnd);
+      const headingEnd = existingHeading + heading.length + 1;
+      content = content.slice(0, headingEnd) + insertion + content.slice(headingEnd);
     }
   } else {
     const firstSection = content.indexOf('\n## ');
