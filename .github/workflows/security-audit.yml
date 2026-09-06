@@ -39,7 +39,6 @@ jobs:
         with:
           working-directory: .github/actions/email-notification-action
           package-label: Email Notification Action
-          changelog-path: SECURITY_FIXES.md
 
       - name: Audit npm security audit action
         id: security
@@ -47,7 +46,6 @@ jobs:
         with:
           working-directory: .github/actions/npm-security-audit
           package-label: NPM Security Audit Action
-          changelog-path: SECURITY_FIXES.md
 
       - name: Audit preview docs action
         id: preview
@@ -55,7 +53,6 @@ jobs:
         with:
           working-directory: .github/actions/preview-docs-action
           package-label: Preview Docs Action
-          changelog-path: SECURITY_FIXES.md
 
       - name: Audit validate repo action
         id: validate
@@ -63,7 +60,32 @@ jobs:
         with:
           working-directory: .github/actions/validate-repo
           package-label: Validate Repo Action
-          changelog-path: SECURITY_FIXES.md
+
+      - name: Update security changelog
+        shell: bash
+        env:
+          ENTRIES_EMAIL: ${{ steps.email.outputs.changelog-entries }}
+          ENTRIES_SECURITY: ${{ steps.security.outputs.changelog-entries }}
+          ENTRIES_PREVIEW: ${{ steps.preview.outputs.changelog-entries }}
+          ENTRIES_VALIDATE: ${{ steps.validate.outputs.changelog-entries }}
+        run: |
+          set -eo pipefail
+          DATE=$(date -u '+%Y-%m-%d')
+          PIPELINE="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          FILE="SECURITY_FIXES.md"
+          [ -f "$FILE" ] || printf '# Security Fixes\n' > "$FILE"
+
+          {
+            printf '# Security Fixes\n\n'
+            printf '## %s\n\n' "$DATE"
+            printf '%s\n' "$ENTRIES_EMAIL"
+            printf '%s\n' "$ENTRIES_SECURITY"
+            printf '%s\n' "$ENTRIES_PREVIEW"
+            printf '%s\n' "$ENTRIES_VALIDATE"
+            printf -- '- Pipeline: %s\n\n' "$PIPELINE"
+            tail -n +2 "$FILE"
+          } > "$FILE.tmp"
+          mv "$FILE.tmp" "$FILE"
 
       - name: Check for changes
         id: changes

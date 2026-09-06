@@ -12,10 +12,6 @@ inputs:
     description: 'Nome exibido no resumo do workflow.'
     required: false
     default: 'Package'
-  changelog-path:
-    description: 'Arquivo de changelog relativo a raiz do repositorio. Deixe vazio para nao atualizar.'
-    required: false
-    default: ''
 
 outputs:
   had-vulnerabilities:
@@ -26,6 +22,8 @@ outputs:
     description: 'Quantidade de vulnerabilidades depois do fix.'
   audit-before-file:
     description: 'Caminho do JSON de auditoria capturado antes do fix.'
+  changelog-entries:
+    description: 'Linhas de changelog (uma por vulnerabilidade, ou "sem vulnerabilidades") para o workflow agregar.'
 
 runs:
   using: 'node24'

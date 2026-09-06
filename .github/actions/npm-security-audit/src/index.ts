@@ -70,45 +70,6 @@ function changelogEntries(audit: AuditResult, label: string): string[] {
   });
 }
 
-function updateChangelog(file: string, audit: AuditResult, label: string): void {
-  const date = new Date().toISOString().slice(0, 10);
-  const pipeline = `${process.env.GITHUB_SERVER_URL || 'https://github.com'}/${process.env.GITHUB_REPOSITORY || ''}/actions/runs/${process.env.GITHUB_RUN_ID || ''}`;
-  const entries = Object.keys(audit.vulnerabilities || {}).length > 0
-    ? changelogEntries(audit, label)
-    : [`- ${label}: sem vulnerabilidades`];
-
-  let content = fs.existsSync(file)
-    ? fs.readFileSync(file, 'utf8')
-    : '# Security Fixes\n';
-  const heading = `## ${date}`;
-  const entryText = entries.join('\n');
-  const existingHeading = content.indexOf(`${heading}\n`);
-  if (existingHeading >= 0) {
-    const nextHeading = content.indexOf('\n## ', existingHeading + heading.length);
-    let sectionEnd = nextHeading >= 0 ? nextHeading : content.length;
-    let section = content.slice(existingHeading, sectionEnd);
-    if (!section.includes(`**${label}:**`) && !section.includes(`- ${label}: sem vulnerabilidades`)) {
-      const insertion = `\n${entryText}\n`;
-      const headingEnd = existingHeading + heading.length + 1;
-      content = content.slice(0, headingEnd) + insertion + content.slice(headingEnd);
-      sectionEnd += insertion.length;
-      section = content.slice(existingHeading, sectionEnd);
-    }
-    const sectionLines = section
-      .split('\n')
-      .filter((line) => !line.startsWith('- Pipeline:'));
-    section = `${sectionLines.join('\n').trimEnd()}\n- Pipeline: ${pipeline}\n`;
-    content = content.slice(0, existingHeading) + section + content.slice(sectionEnd);
-  } else {
-    const firstSection = content.indexOf('\n## ');
-    const block = `\n${heading}\n\n${entryText}\n- Pipeline: ${pipeline}\n`;
-    content = firstSection >= 0
-      ? content.slice(0, firstSection) + block + content.slice(firstSection)
-      : `${content.trimEnd()}${block}\n`;
-  }
-  fs.writeFileSync(file, content);
-}
-
 async function runCommand(command: string, args: string[], cwd: string, outputFile?: string): Promise<number> {
   let output = '';
   const exitCode = await exec(command, args, {
@@ -181,7 +142,6 @@ export async function run(): Promise<void> {
     const afterExplicitAudit = path.join(os.tmpdir(), `${safeLabel}-audit-after-explicit.json`);
     const afterLock = path.join(cwd, 'package-lock.json');
     const lockfilePath = workingDirectory === '.' ? 'package-lock.json' : `${workingDirectory}/package-lock.json`;
-    const changelogPath = core.getInput('changelog-path');
 
     fs.writeFileSync(beforeLock, '');
     const installExitCode = await runCommand('npm', ['ci', '--no-audit', '--loglevel', 'error'], cwd);
@@ -217,9 +177,10 @@ export async function run(): Promise<void> {
     core.setOutput('before', beforeCount);
     core.setOutput('after', finalCount);
     core.setOutput('audit-before-file', beforeAudit);
-    if (changelogPath) {
-      updateChangelog(path.resolve(workspace, changelogPath), before, label);
-    }
+    const changelogEntriesList = beforeCount > 0
+      ? changelogEntries(before, label)
+      : [`- ${label}: sem vulnerabilidades`];
+    core.setOutput('changelog-entries', changelogEntriesList.join('\n'));
     const summaryLines = [
       `## ${label}`,
       '',
