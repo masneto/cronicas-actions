@@ -33,6 +33,11 @@ jobs:
         with:
           node-version: "24"
           cache: "npm"
+          cache-dependency-path: |
+            .github/actions/email-notification-action/package-lock.json
+            .github/actions/npm-security-audit/package-lock.json
+            .github/actions/preview-docs-action/package-lock.json
+            .github/actions/validate-repo/package-lock.json
 
       - name: Identify Changed Actions
         id: changed-actions
