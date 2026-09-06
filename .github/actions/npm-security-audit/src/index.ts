@@ -3,6 +3,7 @@ import { exec } from '@actions/exec';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
+// trigger rebuild
 
 type AuditResult = {
   metadata?: { vulnerabilities?: Record<string, number> };
