@@ -244,7 +244,7 @@ jobs:
           done
 
           if [ -n "$CHANGELOG_ENTRIES" ]; then
-            printf "\n## %s\n%b- Pipeline: %s\n" "$DATE" "$CHANGELOG_ENTRIES" "$PIPELINE" >> SECURITY_FIXES.md
+            printf "\n## %s\n%b- Pipeline: [%s](%s)\n" "$DATE" "$CHANGELOG_ENTRIES" "$PIPELINE" "$PIPELINE" >> SECURITY_FIXES.md
           fi
 
           echo "had_vulns=$HAD_VULNS" >> "$GITHUB_OUTPUT"
@@ -321,12 +321,18 @@ jobs:
           reviewers: |
             masneto
 
-      # - name: Merge Pull Request
-      #   if: steps.pr.outputs.pull-request-number != ''
-      #   shell: bash
-      #   run: |
-      #     curl -s -X PUT \
-      #       -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-      #       -H "Accept: application/vnd.github.v3+json" \
-      #       "https://api.github.com/repos/${{ github.repository }}/pulls/${{ steps.pr.outputs.pull-request-number }}/merge" \
-      #       -d "{\n              \"commit_title\": \"fix(security): npm audit fixes\",\n              \"merge_method\": \"squash\"\n            }"
+      - name: Merge Pull Request
+        if: steps.pr.outputs.pull-request-number != ''
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ steps.pr.outputs.pull-request-number }}
+        run: |
+          set -euo pipefail
+
+          curl --fail-with-body -sS -X PUT \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/${{ github.repository }}/pulls/$PR_NUMBER/merge" \
+            -d '{"commit_title":"fix(security): npm audit fixes","merge_method":"squash"}'
