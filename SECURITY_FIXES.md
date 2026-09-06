@@ -2,8 +2,6 @@
 
 _Gerado automaticamente pelo workflow de segurança._
 
-# Security Fixes
-
 ## 2026-09-06
 
 - Email Notification Action: sem vulnerabilidades

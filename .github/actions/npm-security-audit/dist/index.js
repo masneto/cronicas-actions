@@ -31390,40 +31390,39 @@ function changelogEntries(audit, label) {
 }
 const CHANGELOG_TITLE = '# Security Fixes Changelog';
 const CHANGELOG_INTRO = '_Gerado automaticamente pelo workflow de segurança._';
+const PIPELINE_PREFIX = '- Pipeline: ';
+function parseSections(content) {
+    const sections = [];
+    let current = null;
+    for (const rawLine of content.split('\n')) {
+        const line = rawLine.trim();
+        if (/^##\s+/.test(line)) {
+            current = { header: line, body: [] };
+            sections.push(current);
+        }
+        else if (current && line) {
+            current.body.push(line);
+        }
+    }
+    return sections;
+}
 function updateChangelog(changelogFile, entries) {
     const date = new Date().toISOString().slice(0, 10);
     const serverUrl = process.env.GITHUB_SERVER_URL || 'https://github.com';
     const repository = process.env.GITHUB_REPOSITORY || '';
     const runId = process.env.GITHUB_RUN_ID || '';
-    const pipelineLine = `- Pipeline: ${serverUrl}/${repository}/actions/runs/${runId}`;
+    const pipelineLine = `${PIPELINE_PREFIX}${serverUrl}/${repository}/actions/runs/${runId}`;
     const header = `## ${date}`;
     const preamble = `${CHANGELOG_TITLE}\n\n${CHANGELOG_INTRO}`;
-    let existing = external_fs_namespaceObject.existsSync(changelogFile) ? external_fs_namespaceObject.readFileSync(changelogFile, 'utf8') : '';
-    if (!existing.trim()) {
-        existing = `${preamble}\n\n`;
+    const existing = external_fs_namespaceObject.existsSync(changelogFile) ? external_fs_namespaceObject.readFileSync(changelogFile, 'utf8') : '';
+    const sections = parseSections(existing);
+    const runEntries = entries.map((entry) => entry.trim()).filter(Boolean);
+    const newSection = [header, '', ...runEntries, pipelineLine];
+    const blocks = [newSection.join('\n')];
+    for (const section of sections) {
+        blocks.push('', [section.header, '', ...section.body].join('\n'));
     }
-    else if (!existing.trimStart().startsWith(CHANGELOG_TITLE)) {
-        existing = `${preamble}\n\n${existing.trimStart()}`;
-    }
-    const lines = existing.split('\n');
-    const sectionIndex = lines.findIndex((line) => line.trim().startsWith('## '));
-    if (sectionIndex !== -1 && lines[sectionIndex].trim() === header) {
-        let insertAt = sectionIndex + 1;
-        for (let i = sectionIndex + 1; i < lines.length; i++) {
-            const line = lines[i].trim();
-            if (line === pipelineLine || line.startsWith('## '))
-                break;
-            insertAt = i + 1;
-        }
-        lines.splice(insertAt, 0, ...entries);
-        external_fs_namespaceObject.writeFileSync(changelogFile, lines.join('\n'));
-        return;
-    }
-    const section = [header, '', ...entries, pipelineLine];
-    const remainder = existing
-        .replace(/^# Security Fixes Changelog\s*\n+_Gerado automaticamente pelo workflow de segurança\._\s*\n+/, '')
-        .trimStart();
-    external_fs_namespaceObject.writeFileSync(changelogFile, `${preamble}\n\n${section.join('\n')}\n\n${remainder}`);
+    external_fs_namespaceObject.writeFileSync(changelogFile, `${preamble}\n\n${blocks.join('\n')}\n`);
 }
 async function runCommand(command, args, cwd, outputFile) {
     let output = '';
@@ -31519,11 +31518,29 @@ async function run() {
         const before = JSON.parse(external_fs_namespaceObject.readFileSync(beforeAudit, 'utf8'));
         const beforeCount = vulnerabilityCount(before);
         info(`${label}: ${beforeCount} vulnerabilidade(s) antes do fix.`);
-        await runCommand('npm', ['audit', 'fix', '--force'], cwd);
-        await runCommand('npm', ['audit', '--json'], cwd, afterFixAudit);
-        await applyFallbacks(afterFixAudit, cwd);
-        await runCommand('npm', ['audit', '--json'], cwd, afterExplicitAudit);
-        const final = JSON.parse(external_fs_namespaceObject.readFileSync(afterExplicitAudit, 'utf8'));
+        const readAudit = (auditFile) => JSON.parse(external_fs_namespaceObject.readFileSync(auditFile, 'utf8'));
+        const MAX_FIX_ROUNDS = 3;
+        let previousCount = beforeCount;
+        let final = before;
+        for (let round = 0; round < MAX_FIX_ROUNDS; round++) {
+            await runCommand('npm', ['audit', 'fix', '--force'], cwd);
+            await runCommand('npm', ['audit', '--json'], cwd, afterFixAudit);
+            await applyFallbacks(afterFixAudit, cwd);
+            await runCommand('npm', ['audit', '--json'], cwd, afterExplicitAudit);
+            const roundResult = readAudit(afterExplicitAudit);
+            const roundCount = vulnerabilityCount(roundResult);
+            final = roundResult;
+            if (roundCount === 0 || roundCount >= previousCount)
+                break;
+            previousCount = roundCount;
+        }
+        if (vulnerabilityCount(final) > 0) {
+            for (const name of Object.keys(final.vulnerabilities || {})) {
+                await runCommand('npm', ['install', '--package-lock-only', '--force', '--ignore-scripts', '--no-audit', '--no-save', `${name}@latest`], cwd);
+            }
+            await runCommand('npm', ['audit', '--json'], cwd, afterExplicitAudit);
+            final = readAudit(afterExplicitAudit);
+        }
         const changes = fixedPackageChanges(before, final, beforeLock, afterLock);
         const finalCount = vulnerabilityCount(final);
         info(`${label}: ${finalCount} vulnerabilidade(s) depois do fix; ${changes.length} pacote(s) atualizado(s).`);
