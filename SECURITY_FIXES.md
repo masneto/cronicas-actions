@@ -1,4 +1,13 @@
 # Security Fixes
+
+## 2026-09-06
+
+- Email Notification Action: sem vulnerabilidades
+- NPM Security Audit Action: sem vulnerabilidades
+- **Preview Docs Action:** axios `>=0.8.1 <0.28.0` -> `1.20.0` - _Axios Cross-Site Request Forgery Vulnerability_ (high)
+- Validate Repo Action: sem vulnerabilidades
+- Pipeline: https://github.com/masneto/cronicas-actions/actions/runs/34008090275
+
 ## 2026-09-05
 
 - **Email Notification Action:** @actions/http-client `?` -> `fixed` - _undici_ (moderate)
