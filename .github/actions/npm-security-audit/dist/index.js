@@ -31477,6 +31477,38 @@ async function applyFallbacks(auditFile, cwd) {
     }
     return applied;
 }
+async function latestVersion(packageName, cwd) {
+    let output = '';
+    const exitCode = await exec_exec('npm', ['view', packageName, 'version'], {
+        cwd,
+        ignoreReturnCode: true,
+        silent: true,
+        listeners: { stdout: (data) => { output += data.toString(); } }
+    });
+    return exitCode === 0 ? output.trim() : null;
+}
+async function fixOverridePins(audit, cwd) {
+    const packageFile = external_path_namespaceObject.join(cwd, 'package.json');
+    const packageJson = JSON.parse(external_fs_namespaceObject.readFileSync(packageFile, 'utf8'));
+    const overrides = { ...(packageJson.overrides || {}) };
+    const vulnerableNames = Object.keys(audit.vulnerabilities || {});
+    let changed = false;
+    for (const name of vulnerableNames) {
+        if (!Object.prototype.hasOwnProperty.call(overrides, name))
+            continue;
+        const latest = await latestVersion(name, cwd);
+        if (!latest || overrides[name] === latest)
+            continue;
+        overrides[name] = latest;
+        changed = true;
+    }
+    if (!changed)
+        return;
+    packageJson.overrides = overrides;
+    external_fs_namespaceObject.writeFileSync(packageFile, `${JSON.stringify(packageJson, null, 2)}\n`);
+    await runCommand('npm', ['install', '--package-lock-only', '--force', '--ignore-scripts', '--no-audit'], cwd);
+    info(`Overrides atualizados para versoes corrigidas: ${vulnerableNames.filter((n) => Object.prototype.hasOwnProperty.call(overrides, n)).join(', ')}.`);
+}
 async function run() {
     try {
         const workspace = process.env.GITHUB_WORKSPACE || process.cwd();
@@ -31543,6 +31575,11 @@ async function run() {
             for (const name of Object.keys(final.vulnerabilities || {})) {
                 await runCommand('npm', ['install', '--package-lock-only', '--force', '--ignore-scripts', '--no-audit', '--no-save', `${name}@latest`], cwd);
             }
+            await runCommand('npm', ['audit', '--json'], cwd, afterExplicitAudit);
+            final = readAudit(afterExplicitAudit);
+        }
+        if (vulnerabilityCount(final) > 0) {
+            await fixOverridePins(final, cwd);
             await runCommand('npm', ['audit', '--json'], cwd, afterExplicitAudit);
             final = readAudit(afterExplicitAudit);
         }
