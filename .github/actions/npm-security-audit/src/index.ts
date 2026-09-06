@@ -36,7 +36,7 @@ function fixVersion(vulnerability: Vulnerability): string {
 
 function vulnerabilityCount(audit: AuditResult): number {
   const vulnerabilities = audit.metadata?.vulnerabilities || {};
-  return ['moderate', 'high', 'critical'].reduce(
+  return ['info', 'low', 'moderate', 'high', 'critical'].reduce(
     (total, severity) => total + (vulnerabilities[severity] || 0),
     0
   );

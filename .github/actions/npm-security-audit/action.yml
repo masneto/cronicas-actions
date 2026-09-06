@@ -27,7 +27,7 @@ inputs:
 
 outputs:
   had-vulnerabilities:
-    description: 'true quando havia vulnerabilidades moderate, high ou critical antes do fix.'
+    description: 'true quando havia vulnerabilidades (qualquer severidade) antes do fix.'
   before:
     description: 'Quantidade de vulnerabilidades antes do fix.'
   after:

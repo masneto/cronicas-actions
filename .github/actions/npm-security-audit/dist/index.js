@@ -31363,7 +31363,7 @@ function fixVersion(vulnerability) {
 }
 function vulnerabilityCount(audit) {
     const vulnerabilities = audit.metadata?.vulnerabilities || {};
-    return ['moderate', 'high', 'critical'].reduce((total, severity) => total + (vulnerabilities[severity] || 0), 0);
+    return ['info', 'low', 'moderate', 'high', 'critical'].reduce((total, severity) => total + (vulnerabilities[severity] || 0), 0);
 }
 function fixedPackageChanges(before, after, beforeFile, afterFile) {
     const beforeLock = JSON.parse(external_fs_namespaceObject.readFileSync(beforeFile, 'utf8')).packages || {};
