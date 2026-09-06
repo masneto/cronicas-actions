@@ -118,6 +118,7 @@ jobs:
             AFTER_FIX_JSON="$(mktemp)"
             AFTER_EXPLICIT_JSON="$(mktemp)"
             FINAL_JSON="$(mktemp)"
+            BEFORE_LOCK_JSON="$(mktemp)"
             REASONS=""
             EXPLICIT_FALLBACK_APPLIED=false
             OVERRIDE_FALLBACK_APPLIED=false
@@ -126,6 +127,7 @@ jobs:
             npm ci --prefix "$DIR" --no-audit --loglevel error
 
             pushd "$DIR" >/dev/null
+            cp package-lock.json "$BEFORE_LOCK_JSON"
             npm audit --json > "$BEFORE_JSON" 2>/dev/null || true
             BEFORE="$(audit_count "$BEFORE_JSON")"
             [ "$BEFORE" -gt 0 ] && HAD_VULNS=true
@@ -198,6 +200,31 @@ jobs:
             else
               echo "- Motivo: _vulnerabilidades remanescentes após fallback_." >> "$GITHUB_STEP_SUMMARY"
             fi
+            FIXED_DEPENDENCIES="$(jq -r --slurpfile final "$FINAL_JSON" '
+              .vulnerabilities as $before
+              | ($final[0].vulnerabilities // {}) as $after
+              | ($before | keys_unsorted[] | select($after[.] == null))
+            ' "$BEFORE_JSON" 2>/dev/null || true)"
+            if [ -n "$FIXED_DEPENDENCIES" ]; then
+              echo "- Dependências corrigidas:" >> "$GITHUB_STEP_SUMMARY"
+              while IFS= read -r DEPENDENCY; do
+                if [ -n "$DEPENDENCY" ]; then
+                  OLD_VERSION="$(jq -r --arg dependency "$DEPENDENCY" '
+                    [.packages | to_entries[]
+                      | select(.key == ("node_modules/" + $dependency)
+                        or (.key | endswith("/node_modules/" + $dependency)))
+                      | .value.version][0] // "não informado"
+                  ' "$BEFORE_LOCK_JSON")"
+                  NEW_VERSION="$(jq -r --arg dependency "$DEPENDENCY" '
+                    [.packages | to_entries[]
+                      | select(.key == ("node_modules/" + $dependency)
+                        or (.key | endswith("/node_modules/" + $dependency)))
+                      | .value.version][0] // "não informado"
+                  ' package-lock.json)"
+                  echo "  - \`$DEPENDENCY\`: \`$OLD_VERSION\` -> \`$NEW_VERSION\`" >> "$GITHUB_STEP_SUMMARY"
+                fi
+              done <<< "$FIXED_DEPENDENCIES"
+            fi
             echo "- Ação de fallback aplicada: $REASONS" >> "$GITHUB_STEP_SUMMARY"
             echo "" >> "$GITHUB_STEP_SUMMARY"
 
@@ -209,8 +236,10 @@ jobs:
 
             if [ -n "$REMAINING_LINES" ]; then
               CHANGELOG_ENTRIES="${CHANGELOG_ENTRIES}${REMAINING_LINES}"$'\n'
+            elif [ "$BEFORE" -gt 0 ]; then
+              CHANGELOG_ENTRIES="${CHANGELOG_ENTRIES}- **${LABEL}:** ${BEFORE} vulnerabilidade(s) corrigida(s) automaticamente."$'\n'
             fi
-            rm -f "$BEFORE_JSON" "$AFTER_FIX_JSON" "$AFTER_EXPLICIT_JSON" "$FINAL_JSON"
+            rm -f "$BEFORE_JSON" "$AFTER_FIX_JSON" "$AFTER_EXPLICIT_JSON" "$FINAL_JSON" "$BEFORE_LOCK_JSON"
             popd >/dev/null
           done
 
