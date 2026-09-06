@@ -1,3 +1,7 @@
+# Security Fixes Changelog
+
+_Gerado automaticamente pelo workflow de segurança._
+
 # Security Fixes
 
 ## 2026-09-06
@@ -8,6 +12,10 @@
 - Validate Repo Action: sem vulnerabilidades
 - Pipeline: https://github.com/masneto/cronicas-actions/actions/runs/34008090275
 
+- **Email Notification Action:** sem vulnerabilidades
+- **NPM Security Audit Action:** sem vulnerabilidades
+- **Preview Docs Action:** axios `>=0.8.1 <0.28.0` → `1.20.0` — _Axios Cross-Site Request Forgery Vulnerability_ (high)
+- **Validate Repo Action:** node-forge `<1.0.0` → `1.4.0` — _Prototype Pollution in node-forge debug API._ (high)
 ## 2026-09-05
 
 - **Email Notification Action:** @actions/http-client `?` -> `fixed` - _undici_ (moderate)
