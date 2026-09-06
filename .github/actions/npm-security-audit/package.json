@@ -12,11 +12,11 @@
     "@actions/exec": "^3.0.0"
   },
   "devDependencies": {
-    "@types/node": "^26.4.1",
     "@eslint/js": "^10.0.1",
+    "@types/node": "^26.4.1",
     "@vercel/ncc": "^0.45.0",
     "eslint": "^10.10.0",
-    "minimist": "1.0.0",
+    "minimist": "^1.2.8",
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.69.0"
   }
