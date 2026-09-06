@@ -58,7 +58,7 @@ function fixedPackageChanges(before: AuditResult, after: AuditResult, beforeFile
       const newPath = Object.keys(afterLock).find((candidate) =>
         candidate === `node_modules/${name}` || candidate.endsWith(`/node_modules/${name}`));
       const newVersion = newPath ? afterLock[newPath]?.version : undefined;
-      return `- **${name}**: \`${oldVersion || 'não informado'}\` -> \`${newVersion || 'corrigido'}\``;
+      return `- \`${name}\`: \`${oldVersion || 'não informado'}\` -> \`${newVersion || 'corrigido'}\``;
     });
 }
 
@@ -201,7 +201,7 @@ export async function run(): Promise<void> {
 
     await runCommand('npm', ['audit', 'fix', '--force'], cwd);
     await runCommand('npm', ['audit', '--json'], cwd, afterFixAudit);
-    const explicitFallbackApplied = await applyFallbacks(afterFixAudit, cwd);
+    await applyFallbacks(afterFixAudit, cwd);
     await runCommand('npm', ['audit', '--json'], cwd, afterExplicitAudit);
 
     const final = JSON.parse(fs.readFileSync(afterExplicitAudit, 'utf8')) as AuditResult;
@@ -216,18 +216,17 @@ export async function run(): Promise<void> {
     if (changelogPath && beforeCount > 0) {
       updateChangelog(path.resolve(workspace, changelogPath), final, label, beforeCount, changes);
     }
-    core.summary.addHeading(label, 2);
-    core.summary.addRaw(`- Corrigidas: **${Math.max(0, beforeCount - finalCount)}**`).addEOL();
-    core.summary.addRaw(`- Não corrigidas: **${finalCount}**`).addEOL();
-    core.summary.addRaw(`- Motivo: *${finalCount === 0 ? 'corrigido por npm audit fix e/ou fallback' : 'vulnerabilidades remanescentes após fallback'}*`).addEOL();
+    const summaryLines = [
+      `## ${label}`,
+      '',
+      `- Corrigidas: **${Math.max(0, beforeCount - finalCount)}**`,
+      `- Não corrigidas: **${finalCount}**`,
+    ];
     if (changes.length) {
-      core.summary.addRaw('- Dependências corrigidas:').addEOL();
-      core.summary.addList(changes.map((change) => change.replace(/^- /, '')));
+      summaryLines.push('- Dependências corrigidas:');
+      summaryLines.push(...changes);
     }
-    const fallbackReason = explicitFallbackApplied
-      ? 'Fallback aplicado com a versão recomendada pelo npm audit.'
-      : 'Fallback de overrides não necessário (vulnerabilidades resolvidas antes desta etapa).';
-    core.summary.addRaw(`- Ação de fallback aplicada: ${fallbackReason}`).addEOL();
+    core.summary.addRaw(`${summaryLines.join('\n')}\n\n`);
     await core.summary.write();
   } catch (error) {
     core.setFailed(error instanceof Error ? error.message : 'Action falhou com erro desconhecido.');

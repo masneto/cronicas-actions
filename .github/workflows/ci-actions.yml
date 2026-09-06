@@ -100,3 +100,21 @@ jobs:
           git commit -m "Atualização de build da(s) action(s): ${{ env.actions }}"
           git push https://x-access-token:${{ secrets.PAT_GITHUB_TOKEN }}@github.com/${{ github.repository }} HEAD:${{ github.ref_name }} --force
           echo "::endgroup::"
+
+      - name: Create Pull Request for Feature Build
+        if: steps.process-actions.outputs.build-changes == 'true' && startsWith(github.ref_name, 'feature/')
+        uses: peter-evans/create-pull-request@v8
+        with:
+          token: ${{ secrets.PAT_GITHUB_TOKEN }}
+          base: main
+          branch: automation/build-actions-${{ github.run_number }}
+          delete-branch: true
+          commit-message: "chore: rebuild actions from ${{ github.ref_name }}"
+          title: "chore: rebuild GitHub Actions (${{ github.ref_name }})"
+          body: |
+            Build automatizado das GitHub Actions originado pela branch `${{ github.ref_name }}`.
+
+            Este PR deve ser avaliado antes de entrar na `main`.
+          labels: |
+            automation
+            dependencies
