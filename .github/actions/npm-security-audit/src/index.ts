@@ -42,14 +42,6 @@ function vulnerabilityCount(audit: AuditResult): number {
   );
 }
 
-function vulnerabilityRows(audit: AuditResult): string[][] {
-  return Object.entries(audit.vulnerabilities || {}).map(([name, vulnerability]) => {
-    const detail = advisoryDetails(vulnerability)[0] || { title: 'sem detalhes', range: '?', url: '' };
-    const title = detail.url ? `${detail.title} (${detail.url})` : detail.title;
-    return [name, vulnerability.severity || 'unknown', title, detail.range, fixVersion(vulnerability)];
-  });
-}
-
 function packageChanges(beforeFile: string, afterFile: string): string[] {
   const before = JSON.parse(fs.readFileSync(beforeFile, 'utf8')).packages || {};
   const after = JSON.parse(fs.readFileSync(afterFile, 'utf8')).packages || {};
