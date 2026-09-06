@@ -70,7 +70,7 @@ jobs:
               echo "Building action..."
               npm run build
 
-              if git diff --quiet -- dist/index.js; then
+              if [ -z "$(git status --porcelain -- dist/index.js)" ]; then
                 echo "Build result for $action: no changes in dist/index.js."
               else
                 echo "Build result for $action: dist/index.js was updated."
