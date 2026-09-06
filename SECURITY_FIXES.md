@@ -4,6 +4,14 @@ _Gerado automaticamente pelo workflow de segurança._
 
 ## 2026-09-06
 
+- **Email Notification Action:** sem vulnerabilidades
+- **NPM Security Audit Action:** sem vulnerabilidades
+- **Preview Docs Action:** axios `>=0.8.1 <0.28.0` → `1.20.0` — _Axios Cross-Site Request Forgery Vulnerability_ (high)
+- **Validate Repo Action:** sem vulnerabilidades
+- Pipeline: https://github.com/masneto/cronicas-actions/actions/runs/34009689778
+
+## 2026-09-06
+
 - **Email Notification Action:** lodash `<4.17.21` → `4.18.1` — _Command Injection in lodash_ (high)
 - **Email Notification Action:** undici `<6.23.0` → `6.28.1` — _Undici has an unbounded decompression chain in HTTP responses on Node.js Fetch API via Content-Encoding leads to resource exhaustion_ (high)
 - **NPM Security Audit Action:** minimist `>=1.0.0 <1.2.6` → `1.2.8` — _Prototype Pollution in minimist_ (critical)
