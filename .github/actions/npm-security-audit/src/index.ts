@@ -178,6 +178,11 @@ export async function run(): Promise<void> {
       const changelogFile = core.getInput('changelog-file') || 'SECURITY_FIXES.md';
       const changelogEntriesInput = core.getInput('changelog-entries') || '';
       const entries = changelogEntriesInput.split('\n').map((line) => line.trim()).filter(Boolean);
+      const hasVulnerabilities = entries.some((entry) => !entry.includes('sem vulnerabilidades'));
+      if (!hasVulnerabilities) {
+        core.info('Sem vulnerabilidades: changelog nao atualizado.');
+        return;
+      }
       const changelogPath = path.resolve(workspace, changelogFile);
       updateChangelog(changelogPath, entries);
       core.info(`Changelog atualizado em ${changelogPath}.`);

@@ -31484,6 +31484,11 @@ async function run() {
             const changelogFile = getInput('changelog-file') || 'SECURITY_FIXES.md';
             const changelogEntriesInput = getInput('changelog-entries') || '';
             const entries = changelogEntriesInput.split('\n').map((line) => line.trim()).filter(Boolean);
+            const hasVulnerabilities = entries.some((entry) => !entry.includes('sem vulnerabilidades'));
+            if (!hasVulnerabilities) {
+                info('Sem vulnerabilidades: changelog nao atualizado.');
+                return;
+            }
             const changelogPath = external_path_namespaceObject.resolve(workspace, changelogFile);
             updateChangelog(changelogPath, entries);
             info(`Changelog atualizado em ${changelogPath}.`);

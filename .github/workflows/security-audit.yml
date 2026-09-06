@@ -8,7 +8,6 @@ on:
       - main
     paths-ignore:
       - '.github/workflows/**'
-      - ".github/actions/**" #remover depois      
   workflow_dispatch:
 
 jobs:
@@ -62,6 +61,7 @@ jobs:
           package-label: Validate Repo Action
 
       - name: Update security changelog
+        if: steps.email.outputs.had-vulnerabilities == 'true' || steps.security.outputs.had-vulnerabilities == 'true' || steps.preview.outputs.had-vulnerabilities == 'true' || steps.validate.outputs.had-vulnerabilities == 'true'
         uses: masneto/cronicas-actions/.github/actions/npm-security-audit@main
         with:
           changelog-only: true
