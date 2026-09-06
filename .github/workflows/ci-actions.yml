@@ -6,6 +6,7 @@ on:
   push:
     branches:
       - "feature/*"
+      - "main"
     paths:
       - ".github/actions/**"
   workflow_dispatch:
@@ -85,7 +86,7 @@ jobs:
           echo "build-changes=$BUILD_CHANGES" >> "$GITHUB_OUTPUT"
 
       - name: Commit and Push Dist Changes
-        if: env.actions != '' || steps.process-actions.outputs.build-changes == 'true'
+        if: steps.process-actions.outputs.build-changes == 'true'
         continue-on-error: true
         run: |
           echo "::group::Commit and Push Dist Changes"
@@ -99,28 +100,3 @@ jobs:
           git commit -m "Atualização de build da(s) action(s): ${{ env.actions }}"
           git push https://x-access-token:${{ secrets.PAT_GITHUB_TOKEN }}@github.com/${{ github.repository }} HEAD:${{ github.ref_name }} --force
           echo "::endgroup::"
-
-      - name: Create Pull Request with all action builds
-        if: steps.process-actions.outputs.build-changes == 'true' && github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.publish == true
-        id: create-pr
-        uses: peter-evans/create-pull-request@v8
-        with:
-          token: ${{ secrets.PAT_GITHUB_TOKEN }}
-          base: main
-          branch: automation/build-all-actions-${{ github.run_number }}
-          delete-branch: true
-          commit-message: "chore: rebuild all actions"
-          title: "chore: rebuild all GitHub Actions"
-          body: "Build automatizado de todas as actions em .github/actions."
-          labels: |
-            automation
-            dependencies
-
-      - name: Merge rebuild Pull Request
-        if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && steps.create-pr.outputs.pull-request-number != ''
-        run: |
-          curl --fail-with-body -sS -X PUT \
-            -H "Authorization: token ${{ secrets.PAT_GITHUB_TOKEN }}" \
-            -H "Accept: application/vnd.github.v3+json" \
-            "https://api.github.com/repos/${{ github.repository }}/pulls/${{ steps.create-pr.outputs.pull-request-number }}/merge" \
-            -d '{"commit_title":"chore: rebuild all GitHub Actions","merge_method":"squash"}'
