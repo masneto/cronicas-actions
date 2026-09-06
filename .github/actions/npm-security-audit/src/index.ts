@@ -3,7 +3,6 @@ import { exec } from '@actions/exec';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-// trigger rebuild
 
 type AuditResult = {
   metadata?: { vulnerabilities?: Record<string, number> };
@@ -173,6 +172,7 @@ export async function run(): Promise<void> {
     const workspace = process.env.GITHUB_WORKSPACE || process.cwd();
     const workingDirectory = core.getInput('working-directory') || '.';
     const label = core.getInput('package-label') || workingDirectory;
+    core.debug(`Auditando ${label} em ${workingDirectory}`);
     const cwd = path.resolve(workspace, workingDirectory);
     const safeLabel = label.replace(/[^a-zA-Z0-9._-]+/g, '-');
     const beforeLock = path.join(os.tmpdir(), `${safeLabel}-package-lock-before.json`);
