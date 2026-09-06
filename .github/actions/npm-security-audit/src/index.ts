@@ -66,8 +66,49 @@ function changelogEntries(audit: AuditResult, label: string): string[] {
   return Object.entries(audit.vulnerabilities || {}).map(([name, vulnerability]) => {
     const detail = advisoryDetails(vulnerability)[0] || { title: 'sem detalhes', range: '?' };
     const fix = fixVersion(vulnerability);
-    return `- **${label}:** ${name} \`${detail.range}\` -> \`${fix}\` - _${detail.title}_ (${vulnerability.severity || 'unknown'})`;
+    return `- **${label}:** ${name} \`${detail.range}\` → \`${fix}\` — _${detail.title}_ (${vulnerability.severity || 'unknown'})`;
   });
+}
+
+const CHANGELOG_TITLE = '# Security Fixes Changelog';
+const CHANGELOG_INTRO = '_Gerado automaticamente pelo workflow de segurança._';
+
+function updateChangelog(changelogFile: string, entries: string[]): void {
+  const date = new Date().toISOString().slice(0, 10);
+  const serverUrl = process.env.GITHUB_SERVER_URL || 'https://github.com';
+  const repository = process.env.GITHUB_REPOSITORY || '';
+  const runId = process.env.GITHUB_RUN_ID || '';
+  const pipelineLine = `- Pipeline: ${serverUrl}/${repository}/actions/runs/${runId}`;
+  const header = `## ${date}`;
+  const preamble = `${CHANGELOG_TITLE}\n\n${CHANGELOG_INTRO}`;
+
+  let existing = fs.existsSync(changelogFile) ? fs.readFileSync(changelogFile, 'utf8') : '';
+  if (!existing.trim()) {
+    existing = `${preamble}\n\n`;
+  } else if (!existing.trimStart().startsWith(CHANGELOG_TITLE)) {
+    existing = `${preamble}\n\n${existing.trimStart()}`;
+  }
+
+  const lines = existing.split('\n');
+  const sectionIndex = lines.findIndex((line) => line.trim().startsWith('## '));
+
+  if (sectionIndex !== -1 && lines[sectionIndex].trim() === header) {
+    let insertAt = sectionIndex + 1;
+    for (let i = sectionIndex + 1; i < lines.length; i++) {
+      const line = lines[i].trim();
+      if (line === pipelineLine || line.startsWith('## ')) break;
+      insertAt = i + 1;
+    }
+    lines.splice(insertAt, 0, ...entries);
+    fs.writeFileSync(changelogFile, lines.join('\n'));
+    return;
+  }
+
+  const section = [header, '', ...entries, pipelineLine];
+  const remainder = existing
+    .replace(/^# Security Fixes Changelog\s*\n+_Gerado automaticamente pelo workflow de segurança\._\s*\n+/, '')
+    .trimStart();
+  fs.writeFileSync(changelogFile, `${preamble}\n\n${section.join('\n')}\n\n${remainder}`);
 }
 
 async function runCommand(command: string, args: string[], cwd: string, outputFile?: string): Promise<number> {
@@ -131,6 +172,17 @@ async function applyFallbacks(auditFile: string, cwd: string): Promise<boolean> 
 export async function run(): Promise<void> {
   try {
     const workspace = process.env.GITHUB_WORKSPACE || process.cwd();
+
+    if (core.getBooleanInput('changelog-only')) {
+      const changelogFile = core.getInput('changelog-file') || 'SECURITY_FIXES.md';
+      const changelogEntriesInput = core.getInput('changelog-entries') || '';
+      const entries = changelogEntriesInput.split('\n').map((line) => line.trim()).filter(Boolean);
+      const changelogPath = path.resolve(workspace, changelogFile);
+      updateChangelog(changelogPath, entries);
+      core.info(`Changelog atualizado em ${changelogPath}.`);
+      return;
+    }
+
     const workingDirectory = core.getInput('working-directory') || '.';
     const label = core.getInput('package-label') || workingDirectory;
     core.debug(`Auditando ${label} em ${workingDirectory}`);
@@ -179,7 +231,7 @@ export async function run(): Promise<void> {
     core.setOutput('audit-before-file', beforeAudit);
     const changelogEntriesList = beforeCount > 0
       ? changelogEntries(before, label)
-      : [`- ${label}: sem vulnerabilidades`];
+      : [`- **${label}:** sem vulnerabilidades`];
     core.setOutput('changelog-entries', changelogEntriesList.join('\n'));
     const summaryLines = [
       `## ${label}`,

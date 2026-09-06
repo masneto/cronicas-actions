@@ -62,30 +62,15 @@ jobs:
           package-label: Validate Repo Action
 
       - name: Update security changelog
-        shell: bash
-        env:
-          ENTRIES_EMAIL: ${{ steps.email.outputs.changelog-entries }}
-          ENTRIES_SECURITY: ${{ steps.security.outputs.changelog-entries }}
-          ENTRIES_PREVIEW: ${{ steps.preview.outputs.changelog-entries }}
-          ENTRIES_VALIDATE: ${{ steps.validate.outputs.changelog-entries }}
-        run: |
-          set -eo pipefail
-          DATE=$(date -u '+%Y-%m-%d')
-          PIPELINE="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-          FILE="SECURITY_FIXES.md"
-          [ -f "$FILE" ] || printf '# Security Fixes\n' > "$FILE"
-
-          {
-            printf '# Security Fixes\n\n'
-            printf '## %s\n\n' "$DATE"
-            printf '%s\n' "$ENTRIES_EMAIL"
-            printf '%s\n' "$ENTRIES_SECURITY"
-            printf '%s\n' "$ENTRIES_PREVIEW"
-            printf '%s\n' "$ENTRIES_VALIDATE"
-            printf -- '- Pipeline: %s\n\n' "$PIPELINE"
-            tail -n +2 "$FILE"
-          } > "$FILE.tmp"
-          mv "$FILE.tmp" "$FILE"
+        uses: masneto/cronicas-actions/.github/actions/npm-security-audit@main
+        with:
+          changelog-only: true
+          changelog-file: SECURITY_FIXES.md
+          changelog-entries: |-
+            ${{ steps.email.outputs.changelog-entries }}
+            ${{ steps.security.outputs.changelog-entries }}
+            ${{ steps.preview.outputs.changelog-entries }}
+            ${{ steps.validate.outputs.changelog-entries }}
 
       - name: Check for changes
         id: changes

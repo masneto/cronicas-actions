@@ -12,6 +12,18 @@ inputs:
     description: 'Nome exibido no resumo do workflow.'
     required: false
     default: 'Package'
+  changelog-file:
+    description: 'Caminho do arquivo markdown com o historico de vulnerabilidades (relativo a raiz do repositorio).'
+    required: false
+    default: 'SECURITY_FIXES.md'
+  changelog-only:
+    description: 'Se true, a action nao executa auditoria: apenas atualiza o changelog com a entrada changelog-entries.'
+    required: false
+    default: 'false'
+  changelog-entries:
+    description: 'Entradas agregadas (multiline) gravadas na secao do dia quando changelog-only=true.'
+    required: false
+    default: ''
 
 outputs:
   had-vulnerabilities:
