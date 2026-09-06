@@ -42,17 +42,24 @@ function vulnerabilityCount(audit: AuditResult): number {
   );
 }
 
-function packageChanges(beforeFile: string, afterFile: string): string[] {
-  const before = JSON.parse(fs.readFileSync(beforeFile, 'utf8')).packages || {};
-  const after = JSON.parse(fs.readFileSync(afterFile, 'utf8')).packages || {};
+function fixedPackageChanges(before: AuditResult, after: AuditResult, beforeFile: string, afterFile: string): string[] {
+  const beforeLock = JSON.parse(fs.readFileSync(beforeFile, 'utf8')).packages || {};
+  const afterLock = JSON.parse(fs.readFileSync(afterFile, 'utf8')).packages || {};
+  const afterVulnerabilities = after.vulnerabilities || {};
 
-  return Object.keys(after).sort().flatMap((packagePath) => {
-    if (!packagePath.startsWith('node_modules/')) return [];
-    const oldVersion = before[packagePath]?.version;
-    const newVersion = after[packagePath]?.version;
-    if (!oldVersion || !newVersion || oldVersion === newVersion) return [];
-    return [`- **${packagePath.slice('node_modules/'.length)}**: \`${oldVersion}\` -> \`${newVersion}\``];
-  });
+  return Object.keys(before.vulnerabilities || {})
+    .filter((name) => !afterVulnerabilities[name])
+    .sort()
+    .map((name) => {
+      const paths = Object.keys(beforeLock).filter((packagePath) =>
+        packagePath === `node_modules/${name}` || packagePath.endsWith(`/node_modules/${name}`));
+      const packagePath = paths[0];
+      const oldVersion = packagePath ? beforeLock[packagePath]?.version : undefined;
+      const newPath = Object.keys(afterLock).find((candidate) =>
+        candidate === `node_modules/${name}` || candidate.endsWith(`/node_modules/${name}`));
+      const newVersion = newPath ? afterLock[newPath]?.version : undefined;
+      return `- **${name}**: \`${oldVersion || 'não informado'}\` -> \`${newVersion || 'corrigido'}\``;
+    });
 }
 
 function changelogEntries(audit: AuditResult, label: string): string[] {
@@ -63,11 +70,13 @@ function changelogEntries(audit: AuditResult, label: string): string[] {
   });
 }
 
-function updateChangelog(file: string, audit: AuditResult, label: string, beforeCount: number): void {
+function updateChangelog(file: string, audit: AuditResult, label: string, beforeCount: number, changes: string[]): void {
   const date = new Date().toISOString().slice(0, 10);
   const pipeline = `${process.env.GITHUB_SERVER_URL || 'https://github.com'}/${process.env.GITHUB_REPOSITORY || ''}/actions/runs/${process.env.GITHUB_RUN_ID || ''}`;
   const entries = Object.keys(audit.vulnerabilities || {}).length > 0
     ? changelogEntries(audit, label)
+    : changes.length > 0
+      ? [`- **${label}:** dependências corrigidas:`, ...changes.map((change) => `  ${change}`)]
     : beforeCount > 0
       ? [`- **${label}:** ${beforeCount} vulnerabilidade(s) corrigida(s) automaticamente.`]
       : [];
@@ -164,7 +173,8 @@ export async function run(): Promise<void> {
     const safeLabel = label.replace(/[^a-zA-Z0-9._-]+/g, '-');
     const beforeLock = path.join(os.tmpdir(), `${safeLabel}-package-lock-before.json`);
     const beforeAudit = path.join(os.tmpdir(), `${safeLabel}-audit-before.json`);
-    const afterAudit = path.join(os.tmpdir(), `${safeLabel}-audit-after.json`);
+    const afterFixAudit = path.join(os.tmpdir(), `${safeLabel}-audit-after-fix.json`);
+    const afterExplicitAudit = path.join(os.tmpdir(), `${safeLabel}-audit-after-explicit.json`);
     const afterLock = path.join(cwd, 'package-lock.json');
     const lockfilePath = workingDirectory === '.' ? 'package-lock.json' : `${workingDirectory}/package-lock.json`;
     const changelogPath = core.getInput('changelog-path');
@@ -189,15 +199,14 @@ export async function run(): Promise<void> {
     const beforeCount = vulnerabilityCount(before);
     core.info(`${label}: ${beforeCount} vulnerabilidade(s) antes do fix.`);
 
-    const force = core.getInput('force') !== 'false';
-    await runCommand('npm', force ? ['audit', 'fix', '--force'] : ['audit', 'fix'], cwd);
-    await runCommand('npm', ['audit', '--json'], cwd, afterAudit);
-    const fallbackApplied = await applyFallbacks(afterAudit, cwd);
-    await runCommand('npm', ['audit', '--json'], cwd, afterAudit);
+    await runCommand('npm', ['audit', 'fix', '--force'], cwd);
+    await runCommand('npm', ['audit', '--json'], cwd, afterFixAudit);
+    const explicitFallbackApplied = await applyFallbacks(afterFixAudit, cwd);
+    await runCommand('npm', ['audit', '--json'], cwd, afterExplicitAudit);
 
-    const after = JSON.parse(fs.readFileSync(afterAudit, 'utf8')) as AuditResult;
-    const changes = packageChanges(beforeLock, afterLock);
-    const finalCount = vulnerabilityCount(after);
+    const final = JSON.parse(fs.readFileSync(afterExplicitAudit, 'utf8')) as AuditResult;
+    const changes = fixedPackageChanges(before, final, beforeLock, afterLock);
+    const finalCount = vulnerabilityCount(final);
     core.info(`${label}: ${finalCount} vulnerabilidade(s) depois do fix; ${changes.length} pacote(s) atualizado(s).`);
 
     core.setOutput('had-vulnerabilities', beforeCount > 0 ? 'true' : 'false');
@@ -205,7 +214,7 @@ export async function run(): Promise<void> {
     core.setOutput('after', finalCount);
     core.setOutput('audit-before-file', beforeAudit);
     if (changelogPath && beforeCount > 0) {
-      updateChangelog(path.resolve(workspace, changelogPath), after, label, beforeCount);
+      updateChangelog(path.resolve(workspace, changelogPath), final, label, beforeCount, changes);
     }
     core.summary.addHeading(label, 2);
     core.summary.addRaw(`- Corrigidas: **${Math.max(0, beforeCount - finalCount)}**`).addEOL();
@@ -215,7 +224,7 @@ export async function run(): Promise<void> {
       core.summary.addRaw('- Dependências corrigidas:').addEOL();
       core.summary.addList(changes.map((change) => change.replace(/^- /, '')));
     }
-    const fallbackReason = fallbackApplied
+    const fallbackReason = explicitFallbackApplied
       ? 'Fallback aplicado com a versão recomendada pelo npm audit.'
       : 'Fallback de overrides não necessário (vulnerabilidades resolvidas antes desta etapa).';
     core.summary.addRaw(`- Ação de fallback aplicada: ${fallbackReason}`).addEOL();

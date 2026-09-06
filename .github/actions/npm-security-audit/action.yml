@@ -12,10 +12,6 @@ inputs:
     description: 'Nome exibido no resumo do workflow.'
     required: false
     default: 'Package'
-  force:
-    description: 'Permite que npm audit fix atualize dependencias major.'
-    required: false
-    default: 'true'
   changelog-path:
     description: 'Arquivo de changelog relativo a raiz do repositorio. Deixe vazio para nao atualizar.'
     required: false
