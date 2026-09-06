@@ -31365,17 +31365,20 @@ function vulnerabilityCount(audit) {
     const vulnerabilities = audit.metadata?.vulnerabilities || {};
     return ['moderate', 'high', 'critical'].reduce((total, severity) => total + (vulnerabilities[severity] || 0), 0);
 }
-function packageChanges(beforeFile, afterFile) {
-    const before = JSON.parse(external_fs_namespaceObject.readFileSync(beforeFile, 'utf8')).packages || {};
-    const after = JSON.parse(external_fs_namespaceObject.readFileSync(afterFile, 'utf8')).packages || {};
-    return Object.keys(after).sort().flatMap((packagePath) => {
-        if (!packagePath.startsWith('node_modules/'))
-            return [];
-        const oldVersion = before[packagePath]?.version;
-        const newVersion = after[packagePath]?.version;
-        if (!oldVersion || !newVersion || oldVersion === newVersion)
-            return [];
-        return [`- **${packagePath.slice('node_modules/'.length)}**: \`${oldVersion}\` -> \`${newVersion}\``];
+function fixedPackageChanges(before, after, beforeFile, afterFile) {
+    const beforeLock = JSON.parse(external_fs_namespaceObject.readFileSync(beforeFile, 'utf8')).packages || {};
+    const afterLock = JSON.parse(external_fs_namespaceObject.readFileSync(afterFile, 'utf8')).packages || {};
+    const afterVulnerabilities = after.vulnerabilities || {};
+    return Object.keys(before.vulnerabilities || {})
+        .filter((name) => !afterVulnerabilities[name])
+        .sort()
+        .map((name) => {
+        const paths = Object.keys(beforeLock).filter((packagePath) => packagePath === `node_modules/${name}` || packagePath.endsWith(`/node_modules/${name}`));
+        const packagePath = paths[0];
+        const oldVersion = packagePath ? beforeLock[packagePath]?.version : undefined;
+        const newPath = Object.keys(afterLock).find((candidate) => candidate === `node_modules/${name}` || candidate.endsWith(`/node_modules/${name}`));
+        const newVersion = newPath ? afterLock[newPath]?.version : undefined;
+        return `- **${name}**: \`${oldVersion || 'não informado'}\` -> \`${newVersion || 'corrigido'}\``;
     });
 }
 function changelogEntries(audit, label) {
@@ -31385,14 +31388,16 @@ function changelogEntries(audit, label) {
         return `- **${label}:** ${name} \`${detail.range}\` -> disponível: \`${fix}\` — _${detail.title}_ (${vulnerability.severity || 'unknown'}, remanescente após o fix)`;
     });
 }
-function updateChangelog(file, audit, label, beforeCount) {
+function updateChangelog(file, audit, label, beforeCount, changes) {
     const date = new Date().toISOString().slice(0, 10);
     const pipeline = `${process.env.GITHUB_SERVER_URL || 'https://github.com'}/${process.env.GITHUB_REPOSITORY || ''}/actions/runs/${process.env.GITHUB_RUN_ID || ''}`;
     const entries = Object.keys(audit.vulnerabilities || {}).length > 0
         ? changelogEntries(audit, label)
-        : beforeCount > 0
-            ? [`- **${label}:** ${beforeCount} vulnerabilidade(s) corrigida(s) automaticamente.`]
-            : [];
+        : changes.length > 0
+            ? [`- **${label}:** dependências corrigidas:`, ...changes.map((change) => `  ${change}`)]
+            : beforeCount > 0
+                ? [`- **${label}:** ${beforeCount} vulnerabilidade(s) corrigida(s) automaticamente.`]
+                : [];
     if (!entries.length)
         return;
     let content = external_fs_namespaceObject.existsSync(file)
@@ -31481,7 +31486,8 @@ async function run() {
         const safeLabel = label.replace(/[^a-zA-Z0-9._-]+/g, '-');
         const beforeLock = external_path_namespaceObject.join(external_os_namespaceObject.tmpdir(), `${safeLabel}-package-lock-before.json`);
         const beforeAudit = external_path_namespaceObject.join(external_os_namespaceObject.tmpdir(), `${safeLabel}-audit-before.json`);
-        const afterAudit = external_path_namespaceObject.join(external_os_namespaceObject.tmpdir(), `${safeLabel}-audit-after.json`);
+        const afterFixAudit = external_path_namespaceObject.join(external_os_namespaceObject.tmpdir(), `${safeLabel}-audit-after-fix.json`);
+        const afterExplicitAudit = external_path_namespaceObject.join(external_os_namespaceObject.tmpdir(), `${safeLabel}-audit-after-explicit.json`);
         const afterLock = external_path_namespaceObject.join(cwd, 'package-lock.json');
         const lockfilePath = workingDirectory === '.' ? 'package-lock.json' : `${workingDirectory}/package-lock.json`;
         const changelogPath = getInput('changelog-path');
@@ -31503,21 +31509,20 @@ async function run() {
         const before = JSON.parse(external_fs_namespaceObject.readFileSync(beforeAudit, 'utf8'));
         const beforeCount = vulnerabilityCount(before);
         info(`${label}: ${beforeCount} vulnerabilidade(s) antes do fix.`);
-        const force = getInput('force') !== 'false';
-        await runCommand('npm', force ? ['audit', 'fix', '--force'] : ['audit', 'fix'], cwd);
-        await runCommand('npm', ['audit', '--json'], cwd, afterAudit);
-        const fallbackApplied = await applyFallbacks(afterAudit, cwd);
-        await runCommand('npm', ['audit', '--json'], cwd, afterAudit);
-        const after = JSON.parse(external_fs_namespaceObject.readFileSync(afterAudit, 'utf8'));
-        const changes = packageChanges(beforeLock, afterLock);
-        const finalCount = vulnerabilityCount(after);
+        await runCommand('npm', ['audit', 'fix', '--force'], cwd);
+        await runCommand('npm', ['audit', '--json'], cwd, afterFixAudit);
+        const explicitFallbackApplied = await applyFallbacks(afterFixAudit, cwd);
+        await runCommand('npm', ['audit', '--json'], cwd, afterExplicitAudit);
+        const final = JSON.parse(external_fs_namespaceObject.readFileSync(afterExplicitAudit, 'utf8'));
+        const changes = fixedPackageChanges(before, final, beforeLock, afterLock);
+        const finalCount = vulnerabilityCount(final);
         info(`${label}: ${finalCount} vulnerabilidade(s) depois do fix; ${changes.length} pacote(s) atualizado(s).`);
         setOutput('had-vulnerabilities', beforeCount > 0 ? 'true' : 'false');
         setOutput('before', beforeCount);
         setOutput('after', finalCount);
         setOutput('audit-before-file', beforeAudit);
         if (changelogPath && beforeCount > 0) {
-            updateChangelog(external_path_namespaceObject.resolve(workspace, changelogPath), after, label, beforeCount);
+            updateChangelog(external_path_namespaceObject.resolve(workspace, changelogPath), final, label, beforeCount, changes);
         }
         summary.addHeading(label, 2);
         summary.addRaw(`- Corrigidas: **${Math.max(0, beforeCount - finalCount)}**`).addEOL();
@@ -31527,7 +31532,7 @@ async function run() {
             summary.addRaw('- Dependências corrigidas:').addEOL();
             summary.addList(changes.map((change) => change.replace(/^- /, '')));
         }
-        const fallbackReason = fallbackApplied
+        const fallbackReason = explicitFallbackApplied
             ? 'Fallback aplicado com a versão recomendada pelo npm audit.'
             : 'Fallback de overrides não necessário (vulnerabilidades resolvidas antes desta etapa).';
         summary.addRaw(`- Ação de fallback aplicada: ${fallbackReason}`).addEOL();
