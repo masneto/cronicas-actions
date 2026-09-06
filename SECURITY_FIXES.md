@@ -15,3 +15,10 @@
 
 - **Validate Repo Action:** @actions/http-client `?` -> `fixed` - _undici_ (moderate)
 - **Validate Repo Action:** undici `<6.23.0` -> `fixed` - _Undici has an unbounded decompression chain in HTTP responses on Node.js Fetch API via Content-Encoding leads to resource exhaustion_ (high)
+
+## 2026-09-06
+- **Email Notification Action:** 1 vulnerabilidade(s) corrigida(s) automaticamente.
+- **NPM Security Audit Action:** 1 vulnerabilidade(s) corrigida(s) automaticamente.
+- **Preview Docs Action:** 1 vulnerabilidade(s) corrigida(s) automaticamente.
+- **Validate Repo Action:** 1 vulnerabilidade(s) corrigida(s) automaticamente.
+- Pipeline: [https://github.com/masneto/cronicas-actions/actions/runs/34002426516](https://github.com/masneto/cronicas-actions/actions/runs/34002426516)
