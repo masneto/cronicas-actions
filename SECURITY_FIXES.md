@@ -2,6 +2,14 @@
 
 _Gerado automaticamente pelo workflow de segurança._
 
+## 2026-09-29
+
+- **Email Notification Action:** nodemailer `>=5.0.0 <10.0.2` → `disponivel` — _Nodemailer: Process-global DNS cache reuses TLS `servername` across transports, enabling cross-tenant SMTP credential disclosure_ (moderate)
+- **NPM Security Audit Action:** sem vulnerabilidades
+- **Preview Docs Action:** sem vulnerabilidades
+- **Validate Repo Action:** sem vulnerabilidades
+- Pipeline: https://github.com/masneto/cronicas-actions/actions/runs/36538993347
+
 ## 2026-09-06
 
 - **Email Notification Action:** sem vulnerabilidades
