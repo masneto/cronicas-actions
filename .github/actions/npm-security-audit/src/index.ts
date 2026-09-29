@@ -13,7 +13,23 @@ type AuditResult = {
   }>;
 };
 
+type LockfilePackages = Record<string, { version?: string } | undefined>;
+
+type PackageJson = {
+  dependencies?: Record<string, string>;
+  devDependencies?: Record<string, string>;
+  optionalDependencies?: Record<string, string>;
+  peerDependencies?: Record<string, string>;
+  overrides?: Record<string, string>;
+};
+
+type FixTarget = { name: string; version: string };
+
 type Vulnerability = NonNullable<NonNullable<AuditResult['vulnerabilities']>[string]>;
+
+const DEPENDENCY_FIELDS = ['dependencies', 'devDependencies', 'optionalDependencies', 'peerDependencies'] as const;
+
+const SEVERITY_WEIGHT: Record<string, number> = { critical: 0, high: 1, moderate: 2, low: 3, info: 4 };
 
 function advisoryDetails(vulnerability: Vulnerability): Array<{ title: string; range: string; url: string }> {
   return (vulnerability.via || []).map((detail) => {
@@ -42,32 +58,80 @@ function vulnerabilityCount(audit: AuditResult): number {
   );
 }
 
-function fixedPackageChanges(before: AuditResult, after: AuditResult, beforeFile: string, afterFile: string): string[] {
-  const beforeLock = JSON.parse(fs.readFileSync(beforeFile, 'utf8')).packages || {};
-  const afterLock = JSON.parse(fs.readFileSync(afterFile, 'utf8')).packages || {};
+function installedVersion(lock: LockfilePackages, name: string): string {
+  const key = Object.keys(lock).find((packagePath) =>
+    packagePath === `node_modules/${name}` || packagePath.endsWith(`/node_modules/${name}`));
+  return (key && lock[key]?.version) || 'não informado';
+}
+
+function readLockfile(file: string): LockfilePackages {
+  try {
+    return JSON.parse(fs.readFileSync(file, 'utf8')).packages || {};
+  } catch {
+    return {};
+  }
+}
+
+function isConcreteVersion(value: string): boolean {
+  return /^\d+\.\d+\.\d+/.test(value);
+}
+
+function pinnedVersion(spec: string): string {
+  return spec.trim().replace(/^[\^~>=<\s]+/, '');
+}
+
+function isNewerVersion(candidate: string, current: string): boolean {
+  if (!isConcreteVersion(candidate) || !isConcreteVersion(current)) return false;
+  const parse = (version: string) => version.split('-')[0].split('.').map((part) => Number.parseInt(part, 10) || 0);
+  const left = parse(candidate);
+  const right = parse(current);
+  for (let index = 0; index < Math.max(left.length, right.length); index++) {
+    const difference = (left[index] ?? 0) - (right[index] ?? 0);
+    if (difference !== 0) return difference > 0;
+  }
+  return false;
+}
+
+function fixedPackageChanges(before: AuditResult, after: AuditResult, beforeLock: LockfilePackages, afterLock: LockfilePackages): string[] {
   const afterVulnerabilities = after.vulnerabilities || {};
 
   return Object.keys(before.vulnerabilities || {})
     .filter((name) => !afterVulnerabilities[name])
     .sort()
     .map((name) => {
-      const paths = Object.keys(beforeLock).filter((packagePath) =>
-        packagePath === `node_modules/${name}` || packagePath.endsWith(`/node_modules/${name}`));
-      const packagePath = paths[0];
-      const oldVersion = packagePath ? beforeLock[packagePath]?.version : undefined;
-      const newPath = Object.keys(afterLock).find((candidate) =>
-        candidate === `node_modules/${name}` || candidate.endsWith(`/node_modules/${name}`));
-      const newVersion = newPath ? afterLock[newPath]?.version : undefined;
-      return `- \`${name}\`: \`${oldVersion || 'não informado'}\` -> \`${newVersion || 'corrigido'}\``;
+      const from = installedVersion(beforeLock, name);
+      const to = installedVersion(afterLock, name);
+      return `- \`${name}\`: \`${from}\` -> \`${to}\``;
     });
 }
 
-function changelogEntries(audit: AuditResult, label: string): string[] {
-  return Object.entries(audit.vulnerabilities || {}).map(([name, vulnerability]) => {
+function changelogEntries(
+  before: AuditResult,
+  after: AuditResult,
+  beforeLock: LockfilePackages,
+  afterLock: LockfilePackages,
+  label: string
+): string[] {
+  const beforeVulnerabilities = before.vulnerabilities || {};
+  const remaining = after.vulnerabilities || {};
+  const lines = Object.entries(remaining).map(([name, vulnerability]) => {
     const detail = advisoryDetails(vulnerability)[0] || { title: 'sem detalhes', range: '?' };
     const fix = fixVersion(vulnerability);
-    return `- **${label}:** ${name} \`${detail.range}\` → \`${fix}\` — _${detail.title}_ (${vulnerability.severity || 'unknown'})`;
+    return `- **${label}:** ${name} \`${detail.range}\` → \`${fix}\` — _${detail.title}_ (${vulnerability.severity || 'unknown'}, remanescente)`;
   });
+
+  for (const name of Object.keys(beforeVulnerabilities).filter((key) => !remaining[key]).sort()) {
+    const detail = advisoryDetails(beforeVulnerabilities[name])[0] || { title: 'sem detalhes', range: '?' };
+    const from = installedVersion(beforeLock, name);
+    const to = installedVersion(afterLock, name);
+    const change = from === to ? `\`${from}\`` : `\`${from}\` → \`${to}\``;
+    lines.push(
+      `- **${label}:** ${name} ${change} — _${detail.title}_ (${beforeVulnerabilities[name].severity || 'unknown'}, corrigida)`
+    );
+  }
+
+  if (lines.length === 0) lines.push(`- **${label}:** sem vulnerabilidades`);
+  return lines;
 }
 
 const CHANGELOG_TITLE = '# Security Fixes Changelog';
@@ -126,81 +190,192 @@ async function runCommand(command: string, args: string[], cwd: string, outputFi
   return exitCode;
 }
 
-async function applyFallbacks(auditFile: string, cwd: string): Promise<boolean> {
-  let applied = false;
-  const audit = JSON.parse(fs.readFileSync(auditFile, 'utf8')) as AuditResult;
-  const fixes = [...new Set(Object.values(audit.vulnerabilities || {})
-    .map((vulnerability) => vulnerability.fixAvailable)
-    .filter((fix): fix is { name: string; version: string } =>
-      typeof fix === 'object' && Boolean(fix?.name) && Boolean(fix?.version))
-    .map((fix) => `${fix.name}@${fix.version}`))];
-
-  for (const fix of fixes) {
-    await runCommand('npm', ['install', '--package-lock-only', '--force', '--ignore-scripts', '--no-audit', '--no-save', fix], cwd);
-    applied = true;
-  }
-
-  const refreshedAudit = path.join(os.tmpdir(), `${path.basename(auditFile)}-fallback.json`);
-  await runCommand('npm', ['audit', '--json'], cwd, refreshedAudit);
-  const remaining = JSON.parse(fs.readFileSync(refreshedAudit, 'utf8')) as AuditResult;
-  const overrideFixes = Object.values(remaining.vulnerabilities || {})
-    .map((vulnerability) => vulnerability.fixAvailable)
-    .filter((fix): fix is { name: string; version: string } =>
-      typeof fix === 'object' && Boolean(fix?.name) && Boolean(fix?.version));
-
-  if (overrideFixes.length === 0) {
-    fs.rmSync(refreshedAudit, { force: true });
-    return applied;
-  }
-
-  const packageFile = path.join(cwd, 'package.json');
-  const backup = fs.readFileSync(packageFile, 'utf8');
-  try {
-    const packageJson = JSON.parse(backup) as { overrides?: Record<string, string> };
-    const overrides = { ...(packageJson.overrides || {}) };
-    for (const fix of overrideFixes) overrides[fix.name] = fix.version;
-    packageJson.overrides = overrides;
-    fs.writeFileSync(packageFile, `${JSON.stringify(packageJson, null, 2)}\n`);
-    await runCommand('npm', ['install', '--package-lock-only', '--force', '--ignore-scripts', '--no-audit'], cwd);
-    applied = true;
-  } finally {
-    fs.writeFileSync(packageFile, backup);
-    fs.rmSync(refreshedAudit, { force: true });
-  }
-  return applied;
+function parseViewVersion(output: string): string | null {
+  const lines = output.split('\n').map((line) => line.trim()).filter(Boolean);
+  const last = lines[lines.length - 1];
+  if (!last) return null;
+  const quoted = last.match(/'([^']+)'\s*$/);
+  return quoted ? quoted[1] : (last.split(/\s+/).pop() ?? null);
 }
 
-async function latestVersion(packageName: string, cwd: string): Promise<string | null> {
+const latestVersionCache = new Map<string, string | null>();
+
+async function latestVersion(packageName: string, cwd: string, major?: string): Promise<string | null> {
+  const spec = major ? `${packageName}@${major}` : packageName;
+  if (latestVersionCache.has(spec)) return latestVersionCache.get(spec) ?? null;
   let output = '';
-  const exitCode = await exec('npm', ['view', packageName, 'version'], {
+  const exitCode = await exec('npm', ['view', spec, 'version'], {
     cwd,
     ignoreReturnCode: true,
     silent: true,
     listeners: { stdout: (data: Buffer) => { output += data.toString(); } }
   });
-  return exitCode === 0 ? output.trim() : null;
+  const version = exitCode === 0 ? parseViewVersion(output) : null;
+  latestVersionCache.set(spec, version);
+  return version;
 }
 
-async function fixOverridePins(audit: AuditResult, cwd: string): Promise<void> {
-  const packageFile = path.join(cwd, 'package.json');
-  const packageJson = JSON.parse(fs.readFileSync(packageFile, 'utf8')) as { overrides?: Record<string, string> };
-  const overrides = { ...(packageJson.overrides || {}) };
-  const vulnerableNames = Object.keys(audit.vulnerabilities || {});
-  let changed = false;
+async function candidateVersions(name: string, fix: FixTarget, installed: string, cwd: string): Promise<string[]> {
+  const candidates: Array<string | null> = fix.version ? [fix.version] : [];
+  const major = installed.split('.')[0];
+  // Prefere a correcao dentro do mesmo major para nao forcar breaking change em transitiva.
+  if (major && /^\d+$/.test(major)) candidates.push(await latestVersion(name, cwd, major));
+  candidates.push(await latestVersion(name, cwd));
+  return [...new Set(candidates.filter((version): version is string => Boolean(version)))];
+}
 
-  for (const name of vulnerableNames) {
-    if (!Object.prototype.hasOwnProperty.call(overrides, name)) continue;
-    const latest = await latestVersion(name, cwd);
-    if (!latest || overrides[name] === latest) continue;
-    overrides[name] = latest;
-    changed = true;
+function fixTarget(name: string, vulnerability: Vulnerability): FixTarget | null {
+  const fix = vulnerability.fixAvailable;
+  if (fix === false) return null;
+  if (fix && typeof fix === 'object') {
+    return fix.name && fix.version ? { name: fix.name, version: fix.version } : null;
+  }
+  // Vulnerabilidades transitivas vem com fixAvailable booleano, sem versao.
+  // A versao corrigida precisa ser resolvida no registro do pacote.
+  return { name, version: '' };
+}
+
+function dependencyField(packageJson: PackageJson, name: string): typeof DEPENDENCY_FIELDS[number] | null {
+  for (const field of DEPENDENCY_FIELDS) {
+    if (packageJson[field]?.[name]) return field;
+  }
+  return null;
+}
+
+function buildResolution(packageJson: PackageJson, name: string, version: string): PackageJson | null {
+  const next: PackageJson = { ...packageJson, overrides: { ...(packageJson.overrides || {}) } };
+  const field = dependencyField(packageJson, name);
+
+  if (field) {
+    const spec = `^${version}`;
+    if (packageJson[field]![name] === spec) return null;
+    (next as Record<string, unknown>)[field] = { ...packageJson[field], [name]: spec };
+    if (packageJson.overrides && name in packageJson.overrides) next.overrides![name] = spec;
+    return next;
   }
 
-  if (!changed) return;
-  packageJson.overrides = overrides;
-  fs.writeFileSync(packageFile, `${JSON.stringify(packageJson, null, 2)}\n`);
+  if (next.overrides![name] === version) return null;
+  next.overrides![name] = version;
+  return next;
+}
+
+async function writeResolution(cwd: string, packageJson: PackageJson): Promise<void> {
+  fs.writeFileSync(path.join(cwd, 'package.json'), `${JSON.stringify(packageJson, null, 2)}\n`);
   await runCommand('npm', ['install', '--package-lock-only', '--force', '--ignore-scripts', '--no-audit'], cwd);
-  core.info(`Overrides atualizados para versoes corrigidas: ${vulnerableNames.filter((n) => Object.prototype.hasOwnProperty.call(overrides, n)).join(', ')}.`);
+}
+
+type PackageState = { manifest: string; lockfile: string };
+
+// npm install --package-lock-only e incremental: reaproveita a versao que ja
+// satisfaz a range. Por isso a reversao restaura os arquivos exatos, sem rodar npm.
+function snapshotState(cwd: string): PackageState {
+  const lockfile = path.join(cwd, 'package-lock.json');
+  return {
+    manifest: fs.readFileSync(path.join(cwd, 'package.json'), 'utf8'),
+    lockfile: fs.existsSync(lockfile) ? fs.readFileSync(lockfile, 'utf8') : '',
+  };
+}
+
+function restoreState(cwd: string, state: PackageState): void {
+  fs.writeFileSync(path.join(cwd, 'package.json'), state.manifest);
+  fs.writeFileSync(path.join(cwd, 'package-lock.json'), state.lockfile);
+}
+
+function withOverrides(packageJson: PackageJson, overrides: Record<string, string>): PackageJson {
+  const next: PackageJson = { ...packageJson, overrides: { ...overrides } };
+  if (Object.keys(overrides).length === 0) delete next.overrides;
+  return next;
+}
+
+async function auditCountIn(cwd: string, auditFile: string): Promise<number> {
+  await runCommand('npm', ['audit', '--json'], cwd, auditFile);
+  return vulnerabilityCount(JSON.parse(fs.readFileSync(auditFile, 'utf8')) as AuditResult);
+}
+
+async function pruneObsoleteOverrides(cwd: string, auditFile: string, remaining: number): Promise<string[]> {
+  const lockFile = path.join(cwd, 'package-lock.json');
+  let current = JSON.parse(fs.readFileSync(path.join(cwd, 'package.json'), 'utf8')) as PackageJson;
+  const names = Object.keys(current.overrides || {});
+  if (names.length === 0) return [];
+
+  const pruned: string[] = [];
+  let currentCount = remaining;
+  for (const name of names) {
+    const pinned = pinnedVersion(current.overrides![name]);
+    if (!isConcreteVersion(pinned)) continue;
+    if (!isConcreteVersion(installedVersion(readLockfile(lockFile), name))) continue;
+
+    const state = snapshotState(cwd);
+    const attempt = withOverrides(current, { ...current.overrides });
+    delete attempt.overrides![name];
+    await writeResolution(cwd, attempt);
+
+    const resolved = installedVersion(readLockfile(lockFile), name);
+    const attemptCount = await auditCountIn(cwd, auditFile);
+
+    // So remove o pin quando ele deixa de ser necessario: a arvore passa a resolver
+    // uma versao mais nova sem reintroduzir vulnerabilidades.
+    if (attemptCount <= currentCount && isNewerVersion(resolved, pinned)) {
+      core.info(`Override ${name}@${pinned} removido: a arvore agora resolve ${resolved} sem vulnerabilidades.`);
+      current = attempt;
+      currentCount = attemptCount;
+      pruned.push(`${name}@${pinned} -> ${resolved}`);
+      continue;
+    }
+
+    restoreState(cwd, state);
+    core.info(`Override ${name}@${pinned} mantido: ainda necessario para o estado atual da arvore.`);
+  }
+
+  return pruned;
+}
+
+async function resolveRemaining(audit: AuditResult, cwd: string, auditFile: string): Promise<AuditResult> {
+  let current = JSON.parse(fs.readFileSync(path.join(cwd, 'package.json'), 'utf8')) as PackageJson;
+  let currentCount = vulnerabilityCount(audit);
+
+  const targets = Object.entries(audit.vulnerabilities || {})
+    .map(([name, vulnerability]) => ({
+      severity: SEVERITY_WEIGHT[vulnerability.severity || 'info'] ?? 5,
+      target: fixTarget(name, vulnerability),
+    }))
+    .filter((entry): entry is { severity: number; target: FixTarget } => entry.target !== null)
+    .sort((a, b) => a.severity - b.severity);
+
+  for (const { target } of targets) {
+    if (currentCount === 0) break;
+
+    const installed = installedVersion(readLockfile(path.join(cwd, 'package-lock.json')), target.name);
+    const candidates = await candidateVersions(target.name, target, installed, cwd);
+    if (candidates.length === 0) {
+      core.warning(`Nao foi possivel determinar a versao corrigida de ${target.name}.`);
+      continue;
+    }
+
+    for (const version of candidates) {
+      const state = snapshotState(cwd);
+      const resolution = buildResolution(current, target.name, version);
+      if (!resolution) continue;
+
+      await writeResolution(cwd, resolution);
+      await runCommand('npm', ['audit', '--json'], cwd, auditFile);
+      const attempt = JSON.parse(fs.readFileSync(auditFile, 'utf8')) as AuditResult;
+      const attemptCount = vulnerabilityCount(attempt);
+
+      if (attemptCount < currentCount) {
+        currentCount = attemptCount;
+        current = resolution;
+        core.info(`${target.name} fixado em ${version} (de ${installed}): restam ${currentCount} vulnerabilidade(s).`);
+        break;
+      }
+
+      restoreState(cwd, state);
+      core.warning(`Resolucao de ${target.name}@${version} revertida: nao reduziu as vulnerabilidades.`);
+    }
+  }
+
+  await runCommand('npm', ['audit', '--json'], cwd, auditFile);
+  return JSON.parse(fs.readFileSync(auditFile, 'utf8')) as AuditResult;
 }
 
 export async function run(): Promise<void> {
@@ -260,33 +435,30 @@ export async function run(): Promise<void> {
     const MAX_FIX_ROUNDS = 3;
     let previousCount = beforeCount;
     let final = before;
-    for (let round = 0; round < MAX_FIX_ROUNDS; round++) {
+    for (let round = 0; round < MAX_FIX_ROUNDS && previousCount > 0; round++) {
       await runCommand('npm', ['audit', 'fix', '--force'], cwd);
       await runCommand('npm', ['audit', '--json'], cwd, afterFixAudit);
-      await applyFallbacks(afterFixAudit, cwd);
-      await runCommand('npm', ['audit', '--json'], cwd, afterExplicitAudit);
-      const roundResult = readAudit(afterExplicitAudit);
+      const roundResult = readAudit(afterFixAudit);
       const roundCount = vulnerabilityCount(roundResult);
-      final = roundResult;
-      if (roundCount === 0 || roundCount >= previousCount) break;
-      previousCount = roundCount;
-    }
-
-    if (vulnerabilityCount(final) > 0) {
-      for (const name of Object.keys(final.vulnerabilities || {})) {
-        await runCommand('npm', ['install', '--package-lock-only', '--force', '--ignore-scripts', '--no-audit', '--no-save', `${name}@latest`], cwd);
+      if (roundCount === 0 || roundCount >= previousCount) {
+        final = roundResult;
+        break;
       }
-      await runCommand('npm', ['audit', '--json'], cwd, afterExplicitAudit);
-      final = readAudit(afterExplicitAudit);
+      final = await resolveRemaining(roundResult, cwd, afterExplicitAudit);
+      previousCount = vulnerabilityCount(final);
     }
 
     if (vulnerabilityCount(final) > 0) {
-      await fixOverridePins(final, cwd);
-      await runCommand('npm', ['audit', '--json'], cwd, afterExplicitAudit);
-      final = readAudit(afterExplicitAudit);
+      final = await resolveRemaining(final, cwd, afterExplicitAudit);
     }
 
-    const changes = fixedPackageChanges(before, final, beforeLock, afterLock);
+    const prunedOverrides = await pruneObsoleteOverrides(cwd, afterExplicitAudit, vulnerabilityCount(final));
+    await runCommand('npm', ['audit', '--json'], cwd, afterExplicitAudit);
+    final = readAudit(afterExplicitAudit);
+
+    const beforeLockPackages = readLockfile(beforeLock);
+    const afterLockPackages = readLockfile(afterLock);
+    const changes = fixedPackageChanges(before, final, beforeLockPackages, afterLockPackages);
     const finalCount = vulnerabilityCount(final);
     core.info(`${label}: ${finalCount} vulnerabilidade(s) depois do fix; ${changes.length} pacote(s) atualizado(s).`);
 
@@ -294,10 +466,7 @@ export async function run(): Promise<void> {
     core.setOutput('before', beforeCount);
     core.setOutput('after', finalCount);
     core.setOutput('audit-before-file', beforeAudit);
-    const changelogEntriesList = beforeCount > 0
-      ? changelogEntries(before, label)
-      : [`- **${label}:** sem vulnerabilidades`];
-    core.setOutput('changelog-entries', changelogEntriesList.join('\n'));
+    core.setOutput('changelog-entries', changelogEntries(before, final, beforeLockPackages, afterLockPackages, label).join('\n'));
     const summaryLines = [
       `## ${label}`,
       '',
@@ -307,6 +476,10 @@ export async function run(): Promise<void> {
     if (changes.length) {
       summaryLines.push('- Dependências corrigidas:');
       summaryLines.push(...changes);
+    }
+    if (prunedOverrides.length) {
+      summaryLines.push('- Overrides obsoletos removidos:');
+      summaryLines.push(...prunedOverrides.map((entry) => `  - \`${entry}\``));
     }
     core.summary.addRaw(`${summaryLines.join('\n')}\n\n`);
     await core.summary.write();
