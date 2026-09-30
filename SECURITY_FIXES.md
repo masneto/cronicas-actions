@@ -2,6 +2,14 @@
 
 _Gerado automaticamente pelo workflow de segurança._
 
+## 2026-09-30
+
+- **Email Notification Action:** brace-expansion `5.0.9` → `5.0.12` — _brace-expansion: Quadratic-time expansion of the `{a},b}` rewrite causes CPU denial of service_ (high, corrigida)
+- **NPM Security Audit Action:** brace-expansion `5.0.9` → `5.0.12` — _brace-expansion: Quadratic-time expansion of the `{a},b}` rewrite causes CPU denial of service_ (high, corrigida)
+- **Preview Docs Action:** brace-expansion `5.0.9` → `5.0.12` — _brace-expansion: Quadratic-time expansion of the `{a},b}` rewrite causes CPU denial of service_ (high, corrigida)
+- **Validate Repo Action:** brace-expansion `5.0.9` → `5.0.12` — _brace-expansion: Quadratic-time expansion of the `{a},b}` rewrite causes CPU denial of service_ (high, corrigida)
+- Pipeline: https://github.com/masneto/cronicas-actions/actions/runs/36686378901
+
 ## 2026-09-29
 
 - **Email Notification Action:** nodemailer `>=5.0.0 <10.0.2` → `disponivel` — _Nodemailer: Process-global DNS cache reuses TLS `servername` across transports, enabling cross-tenant SMTP credential disclosure_ (moderate)
