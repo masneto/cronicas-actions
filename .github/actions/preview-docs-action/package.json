@@ -1,6 +1,7 @@
 {
   "name": "docs-preview-action",
   "version": "1.0.0",
+  "private": true,
   "description": "Action utilizada para validar a estrutura do repositório",
   "main": "dist/index.js",
   "scripts": {

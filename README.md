@@ -9,7 +9,8 @@ Repositório de GitHub Actions customizadas para automação dos workflows do pr
 - [email-notification-action](#email-notification-action)
 - [preview-docs-action](#preview-docs-action)
 - [npm-security-audit](#npm-security-audit)
-- [Testes](#testes)
+- [Workflow de Segurança](#workflow-de-segurança)
+- [Desenvolvimento](#desenvolvimento)
 - [Licença](#licença)
 
 ---
@@ -17,24 +18,38 @@ Repositório de GitHub Actions customizadas para automação dos workflows do pr
 ## Estrutura do Projeto
 
 ```
-.github/actions/
-    ├── email-notification-action/
-    │   ├── action.yml
-    │   ├── dist/
-    │   └── src/
-    ├── npm-security-audit/
-    │   ├── action.yml
-    │   ├── dist/
-    │   └── src/
-    ├── preview-docs-action/
-    │   ├── action.yml
-    │   ├── dist/
-    │   └── src/
-    └── validate-repo/
-        ├── action.yml
-        ├── dist/
-        └── src/
+.github/
+    actions/
+        ├── email-notification-action/
+        │   ├── action.yml
+        │   ├── package.json
+        │   ├── src/
+        │   └── dist/index.js
+        ├── npm-security-audit/
+        │   ├── action.yml
+        │   ├── package.json
+        │   ├── src/
+        │   └── dist/index.js
+        ├── preview-docs-action/
+        │   ├── action.yml
+        │   ├── package.json
+        │   ├── src/
+        │   └── dist/index.js
+        └── validate-repo/
+            ├── action.yml
+            ├── package.json
+            ├── src/
+            └── dist/index.js
+    workflows/
+        ├── ci-actions.yml
+        ├── create-pr.yml
+        └── security-audit.yml
+SECURITY_FIXES.md
 ```
+
+O código-fonte fica em `src/` (TypeScript) e é compilado para `dist/index.js` — é o
+`dist/` que o GitHub executa, então **precisa ser commitado junto com a mudança em `src/`**.
+O workflow de CI faz esse build e commata o `dist/` automaticamente.
 
 ---
 
@@ -161,7 +176,7 @@ Audita dependências npm, aplica correções automaticamente e reporta as vulner
     - before: Quantidade de vulnerabilidades antes do fix
     - after: Quantidade de vulnerabilidades depois do fix
     - audit-before-file: Caminho do JSON de auditoria capturado antes do fix
-    - changelog-entries: Linhas de changelog (uma por vulnerabilidade, ou "sem vulnerabilidades") para o workflow agregar
+    - changelog-entries: Linhas de changelog para o workflow agregar, separando o que foi **corrigido** (com a transição de versão) do que **permanece**
 
 **Como usar em um workflow:**
 
@@ -189,19 +204,92 @@ Atualizando o changelog com as entradas agregadas:
 
 **Funcionamento:**
 
-- Instala as dependências com `npm ci` e captura o lockfile antes da correção.
-- Executa `npm audit` e conta vulnerabilidades de **todas as severidades** (`info` a `critical`).
-- Aplica `npm audit fix --force`, fallbacks e, se necessário, atualiza pins de `overrides` no `package.json` para versões corrigidas.
-- Após o fix, gera os outputs `before`, `after`, `had-vulnerabilities` e `changelog-entries`, além de um resumo no job.
+- Instala as dependências com `npm ci` e lê o lockfile do commit atual
+  (`git show HEAD:<lockfile>`) para ter a versão "antes" mesmo sem precisar reverter o disco.
+- Roda `npm audit` e conta vulnerabilidades de **todas as severidades** (`info` a `critical`).
+- Executa até 3 rodadas de `npm audit fix --force`, medindo o resultado de cada uma. Só segue
+  para a próxima rodada se a contagem realmente caiu.
+- Para as vulnerabilidades que sobram, resolve as versões uma a uma, da severidade mais alta
+  para a mais baixa (`critical` → `info`). Para cada pacote tenta, nesta ordem:
+    1. a versão sugerida pelo advisory;
+    2. a `latest` do **mesmo major** da versão instalada;
+    3. a `latest` global.
+  A primeira tentativa que **reduz** a contagem total é mantida; as demais são revertidas
+  (snapshot de `package.json` + `package-lock.json` restaurados byte a byte).
+- Pacotes que são dependência direta (`dependencies`, `devDependencies`, `optionalDependencies`,
+  `peerDependencies`) recebem `^versão` no campo original. Transitivos entram em `overrides`.
+- Por fim, `pruneObsoleteOverrides` remove os pins que a árvore já resolve sozinha, para não
+  deixar override obsoleto travando a dependência numa versão antiga.
+- Emite os outputs e escreve um resumo no job com as dependências corrigidas e os overrides removidos.
 
-## Testes
-Cada action possui testes automatizados em __tests__ para garantir o funcionamento correto.
-Exemplo, para rodar os testes da action de e-mail:
+**Formato das entradas geradas:**
+
 ```
-cd .github/actions/email-notification-action
-npm install
-npm test
+- **Label:** pacote `1.0.0` → `1.2.0` — _Título do advisory_ (high, corrigida)
+- **Label:** pacote `>=1.0.0 <1.2.0` → `1.3.0` — _Título do advisory_ (high, remanescente)
+- **Label:** sem vulnerabilidades
 ```
+
+Cada execução grava uma seção nova com a data no topo do arquivo, com a lista agregada de todos
+os pacotes auditados e a linha `Pipeline:` apontando para o run. Seções antigas são preservadas.
+
+## Workflow de Segurança
+
+O `security-audit.yml` é a referência de uso completa da `npm-security-audit`. Ele roda
+diariamente (e a cada push), audita **todos** os pacotes do repositório numa passada só,
+consolida tudo num único `SECURITY_FIXES.md`, abre o PR e faz o merge automático.
+
+```yaml
+- name: Audit validate repo action
+  id: validate
+  uses: masneto/cronicas-actions/.github/actions/npm-security-audit@main
+  with:
+    working-directory: .github/actions/validate-repo
+    package-label: Validate Repo Action
+```
+
+Depois, um passo separado recebe as entradas de todos os pacotes e grava o changelog:
+
+```yaml
+- name: Update security changelog
+  if: steps.email.outputs.had-vulnerabilities == 'true' || steps.security.outputs.had-vulnerabilities == 'true' || steps.preview.outputs.had-vulnerabilities == 'true' || steps.validate.outputs.had-vulnerabilities == 'true'
+  uses: masneto/cronicas-actions/.github/actions/npm-security-audit@main
+  with:
+    changelog-only: true
+    changelog-file: SECURITY_FIXES.md
+    changelog-entries: |-
+      ${{ steps.email.outputs.changelog-entries }}
+      ${{ steps.security.outputs.changelog-entries }}
+      ${{ steps.preview.outputs.changelog-entries }}
+      ${{ steps.validate.outputs.changelog-entries }}
+```
+
+**Comportamento a saber:**
+
+- O `changelog-only` é puramente editorial: ele não audita nada, só prepende a seção do dia.
+  Quando nenhuma entrada indica vulnerabilidade real, ele sai sem escrever.
+- O `git diff` que decide a criação do PR roda **depois** do passo de changelog. Como o
+  `SECURITY_FIXES.md` é um arquivo versionado, um advisory que não pôde ser corrigido
+  **ainda assim** abre PR — só com a linha do changelog. Isso é intencional: mantém o
+  advisory pendente visível e registrado no histórico do repositório.
+- O PR é mergeado automaticamente (squash) na branch `security/npm-audit-fixes`.
+
+## Desenvolvimento
+
+Cada action é um pacote npm independente, com dois scripts:
+
+```bash
+cd .github/actions/npm-security-audit
+npm ci
+npm run lint     # eslint
+npm run build    # ncc build src/index.ts -o dist
+```
+
+Ao alterar `src/`, rode `npm run build` e commite o `dist/index.js` junto. O
+`ci-actions.yml` faz isso automaticamente, mas commitar junto evita depender do bot.
+
+Para publicar: abrir PR a partir de uma branch `feature/*` — o `create-pr.yml` cria o PR
+para `main` e o `ci-actions.yml` rebuilda as actions alteradas.
 
 ## Licença
-Os scripts e a documentação deste projeto são distribuídos sob a [Licença MIT](https://github.com/actions/checkout/blob/main/LICENSE)
+Projeto privado. Todos os direitos reservados. Nenhuma licença de uso, cópia ou redistribuição é concedida.
