@@ -9,6 +9,7 @@ on:
       - "main"
     paths:
       - ".github/actions/**"
+      - "!.github/actions/dependency-security-audit/**"
   workflow_dispatch:
     inputs:
       publish:

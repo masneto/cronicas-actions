@@ -6,6 +6,7 @@ on:
   push:
     paths-ignore:
       - '.github/workflows/**'
+      - '.github/actions/dependency-security-audit/**'
   workflow_dispatch: 
 
 jobs:
