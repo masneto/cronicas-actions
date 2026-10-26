@@ -2,6 +2,15 @@
 
 _Gerado automaticamente pelo workflow de segurança._
 
+## 2026-10-24
+
+- **Email Notification Action:** nodemailer `10.0.12` → `10.2.1` — _Nodemailer: A nested comment ends early in addressparser, releasing the rest of the comment as a recipient_ (moderate, corrigida)
+- **Email Notification Action:** undici `6.28.1` → `6.29.1` — _undici vulnerable to Denial of Service via unbounded memory in the EventSource parser_ (high, corrigida)
+- **NPM Security Audit Action:** undici `6.28.1` → `6.29.1` — _undici vulnerable to Denial of Service via unbounded memory in the EventSource parser_ (high, corrigida)
+- **Preview Docs Action:** undici `6.28.1` → `6.29.1` — _undici vulnerable to Denial of Service via unbounded memory in the EventSource parser_ (high, corrigida)
+- **Validate Repo Action:** undici `6.28.1` → `6.29.1` — _undici vulnerable to Denial of Service via unbounded memory in the EventSource parser_ (high, corrigida)
+- Pipeline: https://github.com/masneto/cronicas-actions/actions/runs/40071779841
+
 ## 2026-09-30
 
 - **Email Notification Action:** brace-expansion `5.0.9` → `5.0.12` — _brace-expansion: Quadratic-time expansion of the `{a},b}` rewrite causes CPU denial of service_ (high, corrigida)
