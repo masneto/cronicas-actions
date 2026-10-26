@@ -2,6 +2,15 @@
 
 _Gerado automaticamente pelo workflow de segurança._
 
+## 2026-10-26
+
+- **Email Notification Action:** sem vulnerabilidades
+- **NPM Security Audit Action:** sem vulnerabilidades
+- **Preview Docs Action:** sem vulnerabilidades
+- **Validate Repo Action:** sem vulnerabilidades
+- **Dependency Security Audit Action:** undici `6.28.1` → `6.29.1` — _undici vulnerable to Denial of Service via unbounded memory in the EventSource parser_ (high, corrigida)
+- Pipeline: https://github.com/masneto/cronicas-actions/actions/runs/40423231351
+
 ## 2026-10-24
 
 - **Email Notification Action:** nodemailer `10.0.12` → `10.2.1` — _Nodemailer: A nested comment ends early in addressparser, releasing the rest of the comment as a recipient_ (moderate, corrigida)
