@@ -6,7 +6,6 @@ on:
   push:
     paths-ignore:
       - '.github/workflows/**'
-      - '.github/actions/dependency-security-audit/**'
   workflow_dispatch: 
 
 jobs:
@@ -30,6 +29,7 @@ jobs:
             .github/actions/npm-security-audit/package-lock.json
             .github/actions/preview-docs-action/package-lock.json
             .github/actions/validate-repo/package-lock.json
+            .github/actions/dependency-security-audit/package-lock.json
 
       - name: Audit email notification action
         id: email
@@ -59,8 +59,15 @@ jobs:
           working-directory: .github/actions/validate-repo
           package-label: Validate Repo Action
 
+      - name: Audit dependency security audit action
+        id: dep_security
+        uses: masneto/cronicas-actions/.github/actions/npm-security-audit@main
+        with:
+          working-directory: .github/actions/dependency-security-audit
+          package-label: Dependency Security Audit Action
+
       - name: Update security changelog
-        if: steps.email.outputs.had-vulnerabilities == 'true' || steps.security.outputs.had-vulnerabilities == 'true' || steps.preview.outputs.had-vulnerabilities == 'true' || steps.validate.outputs.had-vulnerabilities == 'true'
+        if: steps.email.outputs.had-vulnerabilities == 'true' || steps.security.outputs.had-vulnerabilities == 'true' || steps.preview.outputs.had-vulnerabilities == 'true' || steps.validate.outputs.had-vulnerabilities == 'true' || steps.dep_security.outputs.had-vulnerabilities == 'true'
         uses: masneto/cronicas-actions/.github/actions/npm-security-audit@main
         with:
           changelog-only: true
@@ -70,6 +77,7 @@ jobs:
             ${{ steps.security.outputs.changelog-entries }}
             ${{ steps.preview.outputs.changelog-entries }}
             ${{ steps.validate.outputs.changelog-entries }}
+            ${{ steps.dep_security.outputs.changelog-entries }}
 
       - name: Check for changes
         id: changes
@@ -82,7 +90,7 @@ jobs:
           fi
 
       - name: Create Pull Request
-        if: (steps.email.outputs.had-vulnerabilities == 'true' || steps.security.outputs.had-vulnerabilities == 'true' || steps.preview.outputs.had-vulnerabilities == 'true' || steps.validate.outputs.had-vulnerabilities == 'true') && steps.changes.outputs.has_changes == 'true'
+        if: (steps.email.outputs.had-vulnerabilities == 'true' || steps.security.outputs.had-vulnerabilities == 'true' || steps.preview.outputs.had-vulnerabilities == 'true' || steps.validate.outputs.had-vulnerabilities == 'true' || steps.dep_security.outputs.had-vulnerabilities == 'true') && steps.changes.outputs.has_changes == 'true'
         id: pr
         uses: peter-evans/create-pull-request@v8
         with:
