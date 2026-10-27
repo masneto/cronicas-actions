@@ -425,8 +425,13 @@ async function runPythonAudit(
   // Instala pip-audit
   await runCommand('python', ['-m', 'pip', 'install', '--quiet', 'pip-audit'], cwd);
 
-  // Executa pip-audit antes de fix
-  await runCommand('python', ['-m', 'pip_audit', '--format=json'], cwd, beforeAuditFile);
+  // Foco exclusivo nas dependências do projeto (requirements.txt)
+  const reqPath = path.join(cwd, 'requirements.txt');
+  const hasRequirements = fs.existsSync(reqPath);
+  const auditArgs = hasRequirements ? ['-r', 'requirements.txt'] : [];
+
+  // Executa pip-audit antes de fix focado no projeto
+  await runCommand('python', ['-m', 'pip_audit', ...auditArgs, '--format=json'], cwd, beforeAuditFile);
   const beforeResult = parsePipAuditReport(beforeAuditFile);
   const beforeCount = beforeResult.count;
   core.info(`[Python] ${label}: ${beforeCount} vulnerabilidade(s) encontrada(s) antes do fix.`);
@@ -434,7 +439,10 @@ async function runPythonAudit(
   // Tenta fix automatico se houver suporte/vulnerabilidades
   if (beforeCount > 0) {
     core.info(`[Python] Tentando corrigir vulnerabilidades com pip-audit --fix...`);
-    await runCommand('python', ['-m', 'pip_audit', '--fix', '--format=json'], cwd, afterAuditFile);
+    // Aplica o fix (sem --format=json para o pip executar a correção)
+    await runCommand('python', ['-m', 'pip_audit', ...auditArgs, '--fix'], cwd);
+    // Re-avalia o status após o fix em formato json
+    await runCommand('python', ['-m', 'pip_audit', ...auditArgs, '--format=json'], cwd, afterAuditFile);
   } else {
     fs.writeFileSync(afterAuditFile, fs.readFileSync(beforeAuditFile, 'utf8'));
   }
