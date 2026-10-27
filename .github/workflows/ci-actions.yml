@@ -9,7 +9,6 @@ on:
       - "main"
     paths:
       - ".github/actions/**"
-      - "!.github/actions/dependency-security-audit/**"
   workflow_dispatch:
     inputs:
       publish:
@@ -39,6 +38,7 @@ jobs:
             .github/actions/npm-security-audit/package-lock.json
             .github/actions/preview-docs-action/package-lock.json
             .github/actions/validate-repo/package-lock.json
+            .github/actions/dependency-security-audit/package-lock.json
 
       - name: Identify Changed Actions
         id: changed-actions
