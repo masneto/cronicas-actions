@@ -3,14 +3,16 @@ name: "[Cronicas] Security Audit - Actions"
 on:
   schedule:
     - cron: '0 2 * * *'
-  push:
-    paths-ignore:
-      - '.github/workflows/**'
+  workflow_run:
+    workflows: ["[Cronicas] CI Actions"]
+    types:
+      - completed
   workflow_dispatch: 
 
 jobs:
   audit:
     name: Audit & Fix Actions
+    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     permissions:
       contents: write

@@ -410,9 +410,13 @@ export async function run(): Promise<void> {
     const lockfilePath = workingDirectory === '.' ? 'package-lock.json' : `${workingDirectory}/package-lock.json`;
 
     fs.writeFileSync(beforeLock, '');
-    const installExitCode = await runCommand('npm', ['ci', '--no-audit', '--loglevel', 'error'], cwd);
+    let installExitCode = await runCommand('npm', ['ci', '--no-audit', '--loglevel', 'error'], cwd);
     if (installExitCode !== 0) {
-      throw new Error(`npm ci falhou em ${workingDirectory} (exit code ${installExitCode}).`);
+      core.info(`npm ci falhou em ${workingDirectory}, tentando npm install como fallback...`);
+      installExitCode = await runCommand('npm', ['install', '--no-audit', '--loglevel', 'error'], cwd);
+      if (installExitCode !== 0) {
+        throw new Error(`npm ci e npm install falharam em ${workingDirectory} (exit code ${installExitCode}).`);
+      }
     }
     const gitShowExitCode = await exec('git', ['show', `HEAD:${lockfilePath}`], {
       cwd: workspace,
